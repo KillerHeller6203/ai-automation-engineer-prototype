@@ -150,10 +150,29 @@ They are included to demonstrate **production intent and system design**, but ar
 ---
 
 ## Live Prototype Access
-Due to n8n Cloud free-tier sharing limitations, the live prototype is provided as **importable n8n workflow JSON templates**.
+🔗 **Live Workflow URL:**  
+https://rickzzy-ai-automation.app.n8n.cloud/workflow/R2NWYP_5W3S9RLvxuJIed?projectId=OhdtGiDvxtEtpnQp&uiContext=workflow_list
+
+> Note: The workflow is hosted on n8n Cloud free tier and will remain accessible during the evaluation window.
+Due to n8n Cloud free-tier sharing limitations, the live prototype is also provided as **importable n8n workflow JSON templates**.
 
 **Primary demo workflow:**
 - `n8n-01-chatbot-mock-ai.json`
 
 All executable workflows can be imported and run directly in **n8n Cloud**.
+
+---
+
+## Self-Evaluation  
+### Designing a Living, Scalable AI Automation System for Real-World Deployment
+
+This prototype was built to mirror the exact expectations outlined in the AI Automation Engineer role and pre-hiring task: designing an adaptive, end-to-end automation system that behaves as a “living” platform rather than a static workflow.
+
+The system demonstrates strong workflow orchestration using n8n as the central engine, covering the full lifecycle from user engagement to qualification, automation, escalation, tracking, and optimization. Each major capability—chatbot hub, AI council, self-optimization scheduler, and dynamic workflow generator—is implemented as an independent, modular workflow. This architecture enables horizontal scaling across industries and vertical scaling from small teams to enterprise-level operations without redesigning the core system.
+
+For real-world scaling, I would introduce tenant-aware configurations, persistent data stores, and production-grade AI integrations (OpenAI/Gemini/Claude with vector databases) to support long-term context, retrieval-augmented generation, and domain-specific intelligence. The self-optimization loop would evolve from rule-based logic into metrics-driven optimization using real conversion, CPA, and growth data, enabling automated A/B testing of prompts, routing logic, and escalation thresholds.
+
+A key scalability lever is the dynamic workflow generator. In production, this would allow business teams to request new automations using natural language, with AI generating structured JSON workflows that require approval before deployment—balancing autonomy, safety, and control. Combined with dashboards and ROI benchmarks, this system can support outcome-based guarantees such as growth targets or automated refunds if performance thresholds are not met.
+
+Overall, this prototype reflects my approach to automation engineering: architecting adaptable systems that evolve through feedback, prioritize measurable outcomes, and minimize manual intervention while retaining human oversight—aligning directly with AONXI’s vision of self-sustaining, data-driven operations.
 
