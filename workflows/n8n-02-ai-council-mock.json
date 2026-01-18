@@ -1,0 +1,91 @@
+{
+  "name": "02 - AI Council (Mock Multi-Agent)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-council",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "council-webhook",
+      "name": "AI Council Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "webhookId": "ai-council-demo"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse incoming request\nconst input = $input.first().json;\nconst query = input.body?.query || input.query || 'How to improve lead conversion?';\nconst context = input.body?.context || {};\n\nreturn {\n  json: {\n    requestId: 'council-' + Date.now(),\n    query,\n    context,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "prepare-request",
+      "name": "Prepare Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK AI AGENT 1: Researcher\nconst data = $input.first().json;\nconst query = data.query.toLowerCase();\n\n// Simulate research analysis\nlet research = {\n  agent: 'RESEARCHER',\n  _mockAI: 'research-agent-v1',\n  analysis: ''\n};\n\nif (query.includes('conversion') || query.includes('lead')) {\n  research.analysis = `Research Findings:\\n` +\n    `1. Industry benchmark conversion rate: 25-35%\\n` +\n    `2. Top performers achieve 40%+ through personalization\\n` +\n    `3. Response time under 5 minutes increases conversion 21x\\n` +\n    `4. Multi-channel follow-up shows 300% improvement\\n` +\n    `5. AI-assisted qualification reduces false positives by 45%`;\n  research.dataPoints = [\n    { metric: 'avg_conversion', value: '28%', source: 'industry_report' },\n    { metric: 'response_impact', value: '21x', source: 'harvard_study' },\n    { metric: 'ai_improvement', value: '45%', source: 'internal_data' }\n  ];\n} else if (query.includes('cost') || query.includes('cpa')) {\n  research.analysis = `Cost Analysis:\\n` +\n    `1. Average CPA in SaaS: $150-300\\n` +\n    `2. Automation reduces CPA by 35-50%\\n` +\n    `3. Lead scoring optimization saves $50/lead\\n` +\n    `4. Self-service qualification cuts costs 60%`;\n} else {\n  research.analysis = `General Research:\\n` +\n    `1. Market trends favor AI-driven automation\\n` +\n    `2. 73% of businesses plan to increase automation spend\\n` +\n    `3. ROI typically 300-500% within 12 months`;\n}\n\nreturn {\n  json: {\n    ...data,\n    researcherOutput: research\n  }\n};"
+      },
+      "id": "mock-agent-researcher",
+      "name": "MOCK AI Agent: Researcher",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK AI AGENT 2: Strategist\nconst data = $input.first().json;\nconst query = data.query.toLowerCase();\nconst researchData = data.researcherOutput;\n\n// Simulate strategic recommendations\nlet strategy = {\n  agent: 'STRATEGIST',\n  _mockAI: 'strategy-agent-v1',\n  recommendations: []\n};\n\nif (query.includes('conversion') || query.includes('lead')) {\n  strategy.recommendations = [\n    {\n      priority: 'HIGH',\n      action: 'Implement instant response system',\n      rationale: 'Based on research showing 21x improvement with <5min response',\n      expectedImpact: '+15% conversion rate',\n      effort: 'Medium'\n    },\n    {\n      priority: 'HIGH', \n      action: 'Add AI-powered lead scoring',\n      rationale: 'Research shows 45% reduction in false positives',\n      expectedImpact: '+$50 savings per lead',\n      effort: 'Low'\n    },\n    {\n      priority: 'MEDIUM',\n      action: 'Deploy multi-channel nurture sequence',\n      rationale: '300% improvement documented',\n      expectedImpact: '+20% qualified leads',\n      effort: 'Medium'\n    }\n  ];\n  strategy.strategicSummary = 'Focus on speed-to-lead and intelligent qualification. Quick wins available with AI scoring implementation.';\n} else {\n  strategy.recommendations = [\n    {\n      priority: 'MEDIUM',\n      action: 'Expand automation coverage',\n      rationale: 'Market trends support increased investment',\n      expectedImpact: '300-500% ROI',\n      effort: 'High'\n    }\n  ];\n  strategy.strategicSummary = 'General automation expansion recommended based on market conditions.';\n}\n\nstrategy.confidenceScore = 0.85;\n\nreturn {\n  json: {\n    ...data,\n    strategistOutput: strategy\n  }\n};"
+      },
+      "id": "mock-agent-strategist",
+      "name": "MOCK AI Agent: Strategist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK AI: Council Moderator - Synthesizes agent outputs\nconst data = $input.first().json;\nconst research = data.researcherOutput;\nconst strategy = data.strategistOutput;\n\n// Synthesize council decision\nconst councilDecision = {\n  _mockAI: 'council-moderator-v1',\n  requestId: data.requestId,\n  query: data.query,\n  \n  synthesis: {\n    summary: `Based on analysis from the AI Council:\\n\\n` +\n      `RESEARCH INSIGHTS:\\n${research.analysis}\\n\\n` +\n      `STRATEGIC RECOMMENDATIONS:\\n` +\n      strategy.recommendations.map((r, i) => \n        `${i+1}. [${r.priority}] ${r.action}\\n   Impact: ${r.expectedImpact}`\n      ).join('\\n') +\n      `\\n\\nCOUNCIL VERDICT:\\n${strategy.strategicSummary}`,\n    \n    consensusLevel: 'HIGH',\n    confidenceScore: strategy.confidenceScore,\n    \n    actionPlan: strategy.recommendations.filter(r => r.priority === 'HIGH').map(r => r.action),\n    \n    nextReviewDate: new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0]\n  },\n  \n  agentContributions: {\n    researcher: research,\n    strategist: strategy\n  },\n  \n  metadata: {\n    processedAt: new Date().toISOString(),\n    agentsConsulted: ['researcher', 'strategist', 'moderator'],\n    processingTimeMs: Math.floor(Math.random() * 500) + 200\n  }\n};\n\nconsole.log('AI COUNCIL DECISION:', JSON.stringify(councilDecision, null, 2));\n\nreturn { json: councilDecision };"
+      },
+      "id": "mock-moderator",
+      "name": "MOCK AI: Council Moderator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond-council",
+      "name": "Return Decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1300, 300]
+    }
+  ],
+  "connections": {
+    "AI Council Webhook": {
+      "main": [[{ "node": "Prepare Request", "type": "main", "index": 0 }]]
+    },
+    "Prepare Request": {
+      "main": [[{ "node": "MOCK AI Agent: Researcher", "type": "main", "index": 0 }]]
+    },
+    "MOCK AI Agent: Researcher": {
+      "main": [[{ "node": "MOCK AI Agent: Strategist", "type": "main", "index": 0 }]]
+    },
+    "MOCK AI Agent: Strategist": {
+      "main": [[{ "node": "MOCK AI: Council Moderator", "type": "main", "index": 0 }]]
+    },
+    "MOCK AI: Council Moderator": {
+      "main": [[{ "node": "Return Decision", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "ai-council" }, { "name": "mock-ai" }, { "name": "multi-agent" }]
+}

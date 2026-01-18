@@ -1,0 +1,78 @@
+{
+  "name": "04 - Dynamic Workflow Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-workflow",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "gen-webhook",
+      "name": "Generate Workflow Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "webhookId": "workflow-generator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse workflow generation request\nconst input = $input.first().json;\nconst requestType = input.body?.type || input.type || 'follow-up';\nconst description = input.body?.description || input.description || 'Create a follow-up sequence';\nconst params = input.body?.parameters || input.parameters || {};\n\nreturn {\n  json: {\n    requestId: 'wf-gen-' + Date.now(),\n    requestType,\n    description,\n    parameters: params,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "parse-request",
+      "name": "Parse Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK AI: Dynamic Workflow Generator\n// Simulates AI generating n8n workflow JSON based on request\n\nconst request = $input.first().json;\nconst type = request.requestType;\nconst baseId = Date.now();\n\n// Template-based workflow generation\nfunction generateWorkflow(type, params) {\n  const templates = {\n    'follow-up': {\n      name: `Generated: Follow-up Sequence`,\n      description: 'Automated follow-up after initial contact',\n      nodes: [\n        {\n          id: `trigger-${baseId}`,\n          name: 'Manual Trigger',\n          type: 'n8n-nodes-base.manualTrigger',\n          typeVersion: 1,\n          position: [200, 300],\n          parameters: {}\n        },\n        {\n          id: `wait-${baseId}`,\n          name: 'Wait 3 Days',\n          type: 'n8n-nodes-base.wait',\n          typeVersion: 1,\n          position: [400, 300],\n          parameters: {\n            amount: params.delayDays || 3,\n            unit: 'days'\n          }\n        },\n        {\n          id: `code-${baseId}`,\n          name: 'Prepare Follow-up',\n          type: 'n8n-nodes-base.code',\n          typeVersion: 2,\n          position: [600, 300],\n          parameters: {\n            jsCode: `// Prepare follow-up message\\nconst lead = $input.first().json;\\nreturn {\\n  json: {\\n    to: lead.email,\\n    subject: 'Following up on our conversation',\\n    body: 'Hi ' + (lead.name || 'there') + ', just checking in...'\\n  }\\n};`\n          }\n        },\n        {\n          id: `log-${baseId}`,\n          name: 'Log Email Sent',\n          type: 'n8n-nodes-base.code',\n          typeVersion: 2,\n          position: [800, 300],\n          parameters: {\n            jsCode: `console.log('MOCK EMAIL:', JSON.stringify($json));\\nreturn $input.all();`\n          }\n        }\n      ],\n      connections: {\n        'Manual Trigger': { main: [[{ node: 'Wait 3 Days', type: 'main', index: 0 }]] },\n        'Wait 3 Days': { main: [[{ node: 'Prepare Follow-up', type: 'main', index: 0 }]] },\n        'Prepare Follow-up': { main: [[{ node: 'Log Email Sent', type: 'main', index: 0 }]] }\n      }\n    },\n    'nurture': {\n      name: 'Generated: Nurture Campaign',\n      description: 'Multi-touch nurture sequence',\n      nodes: [\n        {\n          id: `trigger-${baseId}`,\n          name: 'New Lead Trigger',\n          type: 'n8n-nodes-base.manualTrigger',\n          typeVersion: 1,\n          position: [200, 300],\n          parameters: {}\n        },\n        {\n          id: `email1-${baseId}`,\n          name: 'Welcome Email',\n          type: 'n8n-nodes-base.code',\n          typeVersion: 2,\n          position: [400, 300],\n          parameters: {\n            jsCode: `return { json: { step: 1, type: 'welcome', sent: new Date().toISOString() } };`\n          }\n        },\n        {\n          id: `wait1-${baseId}`,\n          name: 'Wait 2 Days',\n          type: 'n8n-nodes-base.wait',\n          typeVersion: 1,\n          position: [600, 300],\n          parameters: { amount: 2, unit: 'days' }\n        },\n        {\n          id: `email2-${baseId}`,\n          name: 'Value Email',\n          type: 'n8n-nodes-base.code',\n          typeVersion: 2,\n          position: [800, 300],\n          parameters: {\n            jsCode: `return { json: { step: 2, type: 'value_prop', sent: new Date().toISOString() } };`\n          }\n        }\n      ],\n      connections: {\n        'New Lead Trigger': { main: [[{ node: 'Welcome Email', type: 'main', index: 0 }]] },\n        'Welcome Email': { main: [[{ node: 'Wait 2 Days', type: 'main', index: 0 }]] },\n        'Wait 2 Days': { main: [[{ node: 'Value Email', type: 'main', index: 0 }]] }\n      }\n    },\n    'escalation': {\n      name: 'Generated: Escalation Flow',\n      description: 'Automatic escalation based on conditions',\n      nodes: [\n        {\n          id: `trigger-${baseId}`,\n          name: 'Event Trigger',\n          type: 'n8n-nodes-base.manualTrigger',\n          typeVersion: 1,\n          position: [200, 300],\n          parameters: {}\n        },\n        {\n          id: `check-${baseId}`,\n          name: 'Check Condition',\n          type: 'n8n-nodes-base.if',\n          typeVersion: 1,\n          position: [400, 300],\n          parameters: {\n            conditions: {\n              number: [{ value1: '={{ $json.score }}', operation: 'largerEqual', value2: 70 }]\n            }\n          }\n        },\n        {\n          id: `escalate-${baseId}`,\n          name: 'Escalate to Manager',\n          type: 'n8n-nodes-base.code',\n          typeVersion: 2,\n          position: [600, 200],\n          parameters: {\n            jsCode: `console.log('ESCALATION:', $json);\\nreturn { json: { escalated: true, to: 'manager@company.com' } };`\n          }\n        },\n        {\n          id: `normal-${baseId}`,\n          name: 'Normal Processing',\n          type: 'n8n-nodes-base.code',\n          typeVersion: 2,\n          position: [600, 400],\n          parameters: {\n            jsCode: `return { json: { escalated: false, processed: true } };`\n          }\n        }\n      ],\n      connections: {\n        'Event Trigger': { main: [[{ node: 'Check Condition', type: 'main', index: 0 }]] },\n        'Check Condition': {\n          main: [\n            [{ node: 'Escalate to Manager', type: 'main', index: 0 }],\n            [{ node: 'Normal Processing', type: 'main', index: 0 }]\n          ]\n        }\n      }\n    }\n  };\n  \n  return templates[type] || templates['follow-up'];\n}\n\nconst generatedWorkflow = generateWorkflow(type, request.parameters);\n\n// Add metadata\ngeneratedWorkflow.meta = {\n  generatedAt: new Date().toISOString(),\n  requestId: request.requestId,\n  generatedBy: 'mock-ai-workflow-generator-v1',\n  approvalRequired: true\n};\ngeneratedWorkflow.active = false;\ngeneratedWorkflow.settings = { executionOrder: 'v1' };\ngeneratedWorkflow.tags = [{ name: 'auto-generated' }];\n\nreturn {\n  json: {\n    _mockAI: 'workflow-generator-v1',\n    requestId: request.requestId,\n    requestType: type,\n    description: request.description,\n    status: 'GENERATED',\n    workflow: generatedWorkflow,\n    instructions: 'Import this JSON into n8n to use the workflow',\n    approvalRequired: true\n  }\n};"
+      },
+      "id": "mock-ai-generator",
+      "name": "MOCK AI: Generate Workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log the generated workflow\nconst data = $input.first().json;\n\nconsole.log('GENERATED WORKFLOW:', JSON.stringify(data.workflow, null, 2));\n\nreturn {\n  json: {\n    ...data,\n    logged: true,\n    logTimestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "log-generated",
+      "name": "LOG: Generated Workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond-workflow",
+      "name": "Return Generated Workflow",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1080, 300]
+    }
+  ],
+  "connections": {
+    "Generate Workflow Webhook": {
+      "main": [[{ "node": "Parse Request", "type": "main", "index": 0 }]]
+    },
+    "Parse Request": {
+      "main": [[{ "node": "MOCK AI: Generate Workflow", "type": "main", "index": 0 }]]
+    },
+    "MOCK AI: Generate Workflow": {
+      "main": [[{ "node": "LOG: Generated Workflow", "type": "main", "index": 0 }]]
+    },
+    "LOG: Generated Workflow": {
+      "main": [[{ "node": "Return Generated Workflow", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "generator" }, { "name": "dynamic" }, { "name": "mock-ai" }]
+}

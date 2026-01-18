@@ -1,0 +1,334 @@
+{
+  "name": "03 - Self-Optimization Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Run Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/Metrics!A2:H100",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "id": "fetch-metrics-data",
+      "name": "Fetch Metrics Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse metrics data from Google Sheets\n// Expected columns: Date, Leads, Qualified, Converted, Revenue, CPA, ConversionRate, Source\n\nconst response = $input.first().json;\nconst rows = response.values || [];\n\n// If no data, use mock data for demonstration\nlet metricsData = [];\n\nif (rows.length > 0) {\n  metricsData = rows.map(row => ({\n    date: row[0] || new Date().toISOString().split('T')[0],\n    leads: parseInt(row[1]) || 0,\n    qualified: parseInt(row[2]) || 0,\n    converted: parseInt(row[3]) || 0,\n    revenue: parseFloat(row[4]) || 0,\n    cpa: parseFloat(row[5]) || 0,\n    conversionRate: parseFloat(row[6]) || 0,\n    source: row[7] || 'unknown'\n  }));\n} else {\n  // Generate mock data for demonstration\n  const sources = ['chatbot', 'organic', 'referral', 'direct'];\n  for (let i = 0; i < 14; i++) {\n    const date = new Date();\n    date.setDate(date.getDate() - i);\n    \n    const leads = Math.floor(Math.random() * 50) + 20;\n    const qualified = Math.floor(leads * (0.3 + Math.random() * 0.4));\n    const converted = Math.floor(qualified * (0.2 + Math.random() * 0.3));\n    const revenue = converted * (500 + Math.random() * 2000);\n    const cpa = leads > 0 ? (Math.random() * 100 + 50) : 0;\n    \n    metricsData.push({\n      date: date.toISOString().split('T')[0],\n      leads,\n      qualified,\n      converted,\n      revenue,\n      cpa,\n      conversionRate: qualified > 0 ? (converted / qualified * 100) : 0,\n      source: sources[Math.floor(Math.random() * sources.length)]\n    });\n  }\n}\n\n// Calculate aggregate metrics\nconst totalLeads = metricsData.reduce((sum, m) => sum + m.leads, 0);\nconst totalQualified = metricsData.reduce((sum, m) => sum + m.qualified, 0);\nconst totalConverted = metricsData.reduce((sum, m) => sum + m.converted, 0);\nconst totalRevenue = metricsData.reduce((sum, m) => sum + m.revenue, 0);\nconst avgCPA = metricsData.reduce((sum, m) => sum + m.cpa, 0) / metricsData.length;\nconst avgConversionRate = totalQualified > 0 ? (totalConverted / totalQualified * 100) : 0;\n\n// Calculate trends (last 7 days vs previous 7 days)\nconst recent = metricsData.slice(0, 7);\nconst previous = metricsData.slice(7, 14);\n\nconst recentConvRate = recent.reduce((sum, m) => sum + m.conversionRate, 0) / recent.length || 0;\nconst prevConvRate = previous.reduce((sum, m) => sum + m.conversionRate, 0) / previous.length || 0;\nconst conversionTrend = recentConvRate - prevConvRate;\n\n// Identify issues and opportunities\nconst issues = [];\nconst opportunities = [];\n\nif (avgConversionRate < 30) {\n  issues.push({\n    type: 'LOW_CONVERSION',\n    message: `Conversion rate (${avgConversionRate.toFixed(1)}%) is below 30% target`,\n    severity: 'high',\n    suggestion: 'Review qualification criteria and chatbot prompts'\n  });\n}\n\nif (avgCPA > 100) {\n  issues.push({\n    type: 'HIGH_CPA',\n    message: `CPA ($${avgCPA.toFixed(2)}) exceeds $100 target`,\n    severity: 'medium',\n    suggestion: 'Optimize lead sources and reduce acquisition spend'\n  });\n}\n\nif (conversionTrend < -5) {\n  issues.push({\n    type: 'DECLINING_PERFORMANCE',\n    message: `Conversion rate declining by ${Math.abs(conversionTrend).toFixed(1)}%`,\n    severity: 'high',\n    suggestion: 'Immediate review of recent changes needed'\n  });\n}\n\nif (conversionTrend > 5) {\n  opportunities.push({\n    type: 'POSITIVE_MOMENTUM',\n    message: `Conversion rate improving by ${conversionTrend.toFixed(1)}%`,\n    suggestion: 'Document and scale current successful strategies'\n  });\n}\n\n// Source performance analysis\nconst sourcePerformance = {};\nfor (const metric of metricsData) {\n  if (!sourcePerformance[metric.source]) {\n    sourcePerformance[metric.source] = { leads: 0, converted: 0 };\n  }\n  sourcePerformance[metric.source].leads += metric.leads;\n  sourcePerformance[metric.source].converted += metric.converted;\n}\n\nconst bestSource = Object.entries(sourcePerformance)\n  .map(([source, data]) => ({\n    source,\n    conversionRate: data.leads > 0 ? (data.converted / data.leads * 100) : 0\n  }))\n  .sort((a, b) => b.conversionRate - a.conversionRate)[0];\n\nif (bestSource && bestSource.conversionRate > avgConversionRate) {\n  opportunities.push({\n    type: 'TOP_PERFORMER',\n    message: `${bestSource.source} source has ${bestSource.conversionRate.toFixed(1)}% conversion rate`,\n    suggestion: `Increase investment in ${bestSource.source} channel`\n  });\n}\n\nreturn {\n  json: {\n    analysisTimestamp: new Date().toISOString(),\n    periodAnalyzed: `${metricsData.length} days`,\n    aggregateMetrics: {\n      totalLeads,\n      totalQualified,\n      totalConverted,\n      totalRevenue: totalRevenue.toFixed(2),\n      avgCPA: avgCPA.toFixed(2),\n      avgConversionRate: avgConversionRate.toFixed(2)\n    },\n    trends: {\n      conversionTrend: conversionTrend.toFixed(2),\n      direction: conversionTrend > 0 ? 'improving' : conversionTrend < 0 ? 'declining' : 'stable'\n    },\n    issues,\n    opportunities,\n    sourcePerformance,\n    requiresOptimization: issues.some(i => i.severity === 'high'),\n    rawData: metricsData\n  }\n};"
+      },
+      "id": "analyze-metrics",
+      "name": "Analyze Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.requiresOptimization }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "needs-optimization",
+      "name": "Needs Optimization?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.6,
+          "maxTokens": 1000
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an AI optimization specialist analyzing lead generation performance metrics. Based on the data provided:\n\n1. Identify root causes for any issues\n2. Propose specific, actionable optimization recommendations\n3. Suggest prompt adjustments for the chatbot\n4. Recommend workflow modifications\n5. Prioritize recommendations by expected impact\n\nBe specific and data-driven in your recommendations."
+            },
+            {
+              "role": "user",
+              "content": "Performance Analysis Results:\n\n=== AGGREGATE METRICS ===\n{{ JSON.stringify($json.aggregateMetrics, null, 2) }}\n\n=== TRENDS ===\nConversion Trend: {{ $json.trends.direction }} ({{ $json.trends.conversionTrend }}%)\n\n=== ISSUES IDENTIFIED ===\n{{ JSON.stringify($json.issues, null, 2) }}\n\n=== OPPORTUNITIES ===\n{{ JSON.stringify($json.opportunities, null, 2) }}\n\n=== SOURCE PERFORMANCE ===\n{{ JSON.stringify($json.sourcePerformance, null, 2) }}\n\nProvide specific optimization recommendations including:\n1. Chatbot prompt modifications\n2. Qualification criteria adjustments\n3. Workflow improvements\n4. Resource allocation suggestions"
+            }
+          ]
+        }
+      },
+      "id": "generate-optimizations",
+      "name": "Generate Optimizations",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [1120, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate optimization actions based on AI recommendations\nconst analysis = $('Analyze Metrics').item.json;\nconst aiRecommendations = $input.first().json.message?.content || $input.first().json.text || '';\n\n// Create structured optimization log\nconst optimizationLog = {\n  timestamp: new Date().toISOString(),\n  triggeredBy: 'scheduled_analysis',\n  analysisResults: {\n    conversionRate: analysis.aggregateMetrics.avgConversionRate,\n    cpa: analysis.aggregateMetrics.avgCPA,\n    trend: analysis.trends.direction,\n    issueCount: analysis.issues.length\n  },\n  aiRecommendations,\n  proposedActions: []\n};\n\n// Generate specific actions based on issues\nfor (const issue of analysis.issues) {\n  let action = {\n    issueType: issue.type,\n    severity: issue.severity,\n    autoImplement: false,\n    requiresApproval: true\n  };\n  \n  switch (issue.type) {\n    case 'LOW_CONVERSION':\n      action.action = 'ADJUST_QUALIFICATION_THRESHOLD';\n      action.parameters = {\n        currentThreshold: 50,\n        suggestedThreshold: 40,\n        affectedWorkflow: 'chatbot-lead-qualification'\n      };\n      action.promptTweak = 'Lower the qualification score threshold from 50 to 40 to capture more leads, while increasing nurture touchpoints for borderline leads.';\n      break;\n      \n    case 'HIGH_CPA':\n      action.action = 'OPTIMIZE_LEAD_SOURCES';\n      action.parameters = {\n        reduceSpendOn: 'low_performing_sources',\n        increaseSpendOn: 'chatbot'\n      };\n      action.promptTweak = 'Focus chatbot prompts on higher-intent keywords and add budget qualification earlier in the conversation.';\n      break;\n      \n    case 'DECLINING_PERFORMANCE':\n      action.action = 'TRIGGER_EMERGENCY_REVIEW';\n      action.parameters = {\n        notifyTeam: true,\n        pauseAutomation: false\n      };\n      action.promptTweak = 'Review recent prompt changes, consider A/B testing current vs. previous prompt versions.';\n      break;\n      \n    default:\n      action.action = 'MANUAL_REVIEW_REQUIRED';\n  }\n  \n  optimizationLog.proposedActions.push(action);\n}\n\n// Generate prompt adjustment suggestions\nconst promptAdjustments = [];\nif (parseFloat(analysis.aggregateMetrics.avgConversionRate) < 30) {\n  promptAdjustments.push({\n    target: 'qualification_prompts',\n    change: 'Add more open-ended questions to better understand user intent',\n    rationale: 'Current prompts may be too narrow, missing qualified leads'\n  });\n}\n\nif (analysis.issues.some(i => i.type === 'HIGH_CPA')) {\n  promptAdjustments.push({\n    target: 'budget_qualification',\n    change: 'Move budget question earlier in conversation flow',\n    rationale: 'Qualify budget earlier to reduce time spent on low-value leads'\n  });\n}\n\noptimizationLog.promptAdjustments = promptAdjustments;\noptimizationLog.status = 'pending_approval';\n\nreturn {\n  json: optimizationLog\n};"
+      },
+      "id": "create-optimization-actions",
+      "name": "Create Optimization Actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ blocks: [{ type: 'header', text: { type: 'plain_text', text: ':gear: Self-Optimization Report', emoji: true } }, { type: 'section', text: { type: 'mrkdwn', text: '*Analysis Time:* ' + $json.timestamp } }, { type: 'section', fields: [{ type: 'mrkdwn', text: '*Conversion Rate:*\\n' + $json.analysisResults.conversionRate + '%' }, { type: 'mrkdwn', text: '*CPA:*\\n$' + $json.analysisResults.cpa }] }, { type: 'section', fields: [{ type: 'mrkdwn', text: '*Trend:*\\n' + $json.analysisResults.trend }, { type: 'mrkdwn', text: '*Issues Found:*\\n' + $json.analysisResults.issueCount }] }, { type: 'section', text: { type: 'mrkdwn', text: '*Proposed Actions:*\\n' + $json.proposedActions.map(a => '- ' + a.action + ' (' + a.severity + ')').join('\\n') } }, { type: 'section', text: { type: 'mrkdwn', text: '*AI Recommendations (Summary):*\\n' + $json.aiRecommendations.substring(0, 500) + '...' } }, { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Approve All' }, style: 'primary', action_id: 'approve_optimizations' }, { type: 'button', text: { type: 'plain_text', text: 'Review Details' }, action_id: 'review_optimizations' }] }] }) }}",
+        "options": {}
+      },
+      "id": "notify-optimization-ready",
+      "name": "Notify: Optimization Ready",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/OptimizationLog!A:F:append",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $json.timestamp, $json.analysisResults.conversionRate, $json.analysisResults.cpa, $json.analysisResults.trend, $json.proposedActions.length, $json.status ]] }) }}",
+        "options": {}
+      },
+      "id": "log-optimization-run",
+      "name": "Log Optimization Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// No optimization needed - log status\nconst analysis = $('Analyze Metrics').item.json;\n\nreturn {\n  json: {\n    timestamp: new Date().toISOString(),\n    status: 'healthy',\n    message: 'All metrics within acceptable ranges',\n    conversionRate: analysis.aggregateMetrics.avgConversionRate,\n    cpa: analysis.aggregateMetrics.avgCPA,\n    trend: analysis.trends.direction,\n    opportunities: analysis.opportunities\n  }\n};"
+      },
+      "id": "log-healthy-status",
+      "name": "Log Healthy Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/HealthLog!A:E:append",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $json.timestamp, $json.status, $json.conversionRate, $json.cpa, $json.trend ]] }) }}",
+        "options": {}
+      },
+      "id": "log-health-check",
+      "name": "Log Health Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Fetch Metrics Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Metrics Data": {
+      "main": [
+        [
+          {
+            "node": "Analyze Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Metrics": {
+      "main": [
+        [
+          {
+            "node": "Needs Optimization?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Optimization?": {
+      "main": [
+        [
+          {
+            "node": "Generate Optimizations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Healthy Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Optimizations": {
+      "main": [
+        [
+          {
+            "node": "Create Optimization Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Optimization Actions": {
+      "main": [
+        [
+          {
+            "node": "Notify: Optimization Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify: Optimization Ready": {
+      "main": [
+        [
+          {
+            "node": "Log Optimization Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Healthy Status": {
+      "main": [
+        [
+          {
+            "node": "Log Health Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "optimization"
+    },
+    {
+      "name": "scheduled"
+    },
+    {
+      "name": "analytics"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "intelligent-automation-system"
+  }
+}

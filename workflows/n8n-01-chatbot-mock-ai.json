@@ -1,0 +1,173 @@
+{
+  "name": "01 - Lead Chatbot with Mock AI",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "chat-trigger-001",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "webhookId": "lead-chatbot"
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK AI: Lead Scoring & Intent Detection\nconst userMessage = $input.first().json.chatInput || $input.first().json.body?.message || 'Hello';\nconst sessionId = $input.first().json.sessionId || 'session-' + Date.now();\n\n// Simulate intent detection\nfunction detectIntent(msg) {\n  const lower = msg.toLowerCase();\n  const result = { goal: null, budget: null, timeline: null, email: null, industry: null };\n  \n  // Budget\n  const budgetMatch = lower.match(/\\$?([\\d,]+)k?|budget[:\\s]*(\\d+)/i);\n  if (budgetMatch) {\n    let val = parseInt((budgetMatch[1] || budgetMatch[2]).replace(/,/g, ''));\n    if (lower.includes('k')) val *= 1000;\n    result.budget = val;\n  }\n  \n  // Goal\n  const goals = ['lead gen', 'sales', 'marketing', 'growth', 'automation'];\n  for (const g of goals) { if (lower.includes(g)) { result.goal = g; break; } }\n  \n  // Timeline\n  const timeMatch = lower.match(/(\\d+)\\s*(week|month|day)/i);\n  if (timeMatch) result.timeline = timeMatch[0];\n  \n  // Email\n  const emailMatch = lower.match(/[\\w.-]+@[\\w.-]+\\.[a-z]{2,}/i);\n  if (emailMatch) result.email = emailMatch[0];\n  \n  // Industry\n  const industries = ['tech', 'healthcare', 'finance', 'saas', 'retail'];\n  for (const ind of industries) { if (lower.includes(ind)) { result.industry = ind; break; } }\n  \n  return result;\n}\n\n// Calculate score\nfunction calcScore(data) {\n  let score = 0;\n  if (data.goal) score += 25;\n  if (data.budget) score += (data.budget >= 10000 ? 30 : 15);\n  if (data.timeline) score += 15;\n  if (data.email) score += 20;\n  if (data.industry) score += 10;\n  return Math.min(score, 100);\n}\n\nconst detected = detectIntent(userMessage);\nconst score = calcScore(detected);\nconst temperature = score >= 70 ? 'hot' : score >= 50 ? 'warm' : 'cold';\n\n// Determine next question\nlet nextQ = null;\nif (!detected.goal) nextQ = 'What is your primary business goal?';\nelse if (!detected.budget) nextQ = 'What budget are you considering?';\nelse if (!detected.timeline) nextQ = 'What is your timeline?';\nelse if (!detected.email) nextQ = 'Can you share your email for follow-up?';\n\nreturn {\n  json: {\n    sessionId,\n    userMessage,\n    collectedData: detected,\n    qualificationScore: score,\n    leadTemperature: temperature,\n    isQualified: score >= 50,\n    nextQuestion: nextQ,\n    timestamp: new Date().toISOString(),\n    _mockAI: 'lead-scorer-v1'\n  }\n};"
+      },
+      "id": "mock-ai-scorer",
+      "name": "MOCK AI: Lead Scorer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK AI: Response Generator (simulates OpenAI)\nconst data = $input.first().json;\nconst score = data.qualificationScore;\nconst temp = data.leadTemperature;\nconst nextQ = data.nextQuestion;\nconst collected = data.collectedData;\n\nlet response = '';\n\nif (!nextQ) {\n  // Qualification complete\n  response = `Excellent! I've gathered all the information needed.\\n\\n`;\n  response += `Summary:\\n`;\n  response += `- Goal: ${collected.goal || 'Growth'}\\n`;\n  response += `- Budget: $${(collected.budget || 0).toLocaleString()}\\n`;\n  response += `- Timeline: ${collected.timeline || 'Flexible'}\\n`;\n  response += `- Industry: ${collected.industry || 'General'}\\n\\n`;\n  response += `Your lead score: ${score}/100 (${temp.toUpperCase()})\\n\\n`;\n  response += `A specialist will contact you at ${collected.email} within 24 hours!`;\n} else if (score > 0) {\n  response = `Thanks for sharing!\\n\\n`;\n  if (collected.goal) response += `Goal noted: ${collected.goal}\\n`;\n  if (collected.budget) response += `Budget: $${collected.budget.toLocaleString()}\\n`;\n  response += `\\nQuick question: ${nextQ}`;\n} else {\n  response = `Hello! I'm your AI assistant for growth automation.\\n\\n${nextQ}`;\n}\n\nreturn {\n  json: {\n    ...data,\n    aiResponse: response,\n    _mockAI: 'response-generator-v1'\n  }\n};"
+      },
+      "id": "mock-ai-responder",
+      "name": "MOCK AI: Response Generator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isQualified }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-qualified",
+      "name": "Is Qualified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK CRM: Log Lead Object (simulates HubSpot)\nconst data = $input.first().json;\n\nconst crmRecord = {\n  _mockService: 'CRM_HUBSPOT_SIMULATION',\n  action: 'CREATE_CONTACT',\n  timestamp: new Date().toISOString(),\n  contact: {\n    email: data.collectedData.email || `lead-${Date.now()}@demo.com`,\n    lead_score: data.qualificationScore,\n    lead_status: data.leadTemperature.toUpperCase(),\n    properties: {\n      goal: data.collectedData.goal || 'Not specified',\n      budget: data.collectedData.budget || 0,\n      timeline: data.collectedData.timeline || 'Not specified',\n      industry: data.collectedData.industry || 'Not specified',\n      source: 'chatbot',\n      session_id: data.sessionId\n    }\n  },\n  response: {\n    status: 'SUCCESS',\n    contactId: 'mock-contact-' + Date.now(),\n    message: 'Contact created in mock CRM'\n  }\n};\n\nconsole.log('MOCK CRM LOG:', JSON.stringify(crmRecord, null, 2));\n\nreturn {\n  json: {\n    ...data,\n    crmLog: crmRecord\n  }\n};"
+      },
+      "id": "mock-crm",
+      "name": "MOCK CRM: Log Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.leadTemperature }}",
+              "value2": "hot"
+            }
+          ]
+        }
+      },
+      "id": "if-hot",
+      "name": "Is Hot Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1300, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK SLACK: Log Escalation Message\nconst data = $input.first().json;\n\nconst slackMessage = {\n  _mockService: 'SLACK_WEBHOOK_SIMULATION',\n  channel: '#sales-alerts',\n  timestamp: new Date().toISOString(),\n  message: {\n    type: 'HOT_LEAD_ALERT',\n    blocks: [\n      { type: 'header', text: '🔥 HOT LEAD ALERT' },\n      { type: 'section', fields: [\n        { label: 'Score', value: `${data.qualificationScore}/100` },\n        { label: 'Temperature', value: data.leadTemperature.toUpperCase() }\n      ]},\n      { type: 'section', fields: [\n        { label: 'Goal', value: data.collectedData.goal || 'N/A' },\n        { label: 'Budget', value: `$${data.collectedData.budget || 'N/A'}` }\n      ]},\n      { type: 'section', text: `Email: ${data.collectedData.email || 'Not provided'}` },\n      { type: 'actions', buttons: ['Approve & Assign', 'Review Later'] }\n    ]\n  },\n  response: {\n    status: 'DELIVERED',\n    messageId: 'mock-slack-' + Date.now()\n  }\n};\n\nconsole.log('MOCK SLACK LOG:', JSON.stringify(slackMessage, null, 2));\n\nreturn {\n  json: {\n    ...data,\n    slackLog: slackMessage\n  }\n};"
+      },
+      "id": "mock-slack",
+      "name": "MOCK Slack: Escalation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK EMAIL: Log Sent Email (simulates SendGrid)\nconst data = $input.first().json;\n\nconst emailLog = {\n  _mockService: 'EMAIL_SENDGRID_SIMULATION',\n  action: 'SEND_NURTURE_EMAIL',\n  timestamp: new Date().toISOString(),\n  email: {\n    to: data.collectedData.email || 'demo@example.com',\n    from: 'growth-team@company.com',\n    subject: 'Your Personalized Growth Plan',\n    template: 'nurture-sequence-1',\n    dynamicData: {\n      name: 'Valued Lead',\n      goal: data.collectedData.goal || 'growth',\n      score: data.qualificationScore,\n      nextSteps: 'A specialist will reach out within 24 hours'\n    },\n    body: `Hi there!\\n\\nThank you for your interest in ${data.collectedData.goal || 'growth automation'}.\\n\\nYour qualification score: ${data.qualificationScore}/100\\n\\nWe'll be in touch soon!`\n  },\n  response: {\n    status: 'QUEUED',\n    messageId: 'mock-email-' + Date.now(),\n    deliveryEstimate: '< 1 minute'\n  }\n};\n\nconsole.log('MOCK EMAIL LOG:', JSON.stringify(emailLog, null, 2));\n\nreturn {\n  json: {\n    ...data,\n    emailLog: emailLog\n  }\n};"
+      },
+      "id": "mock-email",
+      "name": "MOCK Email: Nurture",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "merge-paths",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1740, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('MOCK AI: Response Generator').item.json.aiResponse }}",
+        "options": {}
+      },
+      "id": "respond-chat",
+      "name": "Respond to Chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pass through for unqualified leads\nreturn $input.all();"
+      },
+      "id": "pass-unqualified",
+      "name": "Continue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 400]
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [[{ "node": "MOCK AI: Lead Scorer", "type": "main", "index": 0 }]]
+    },
+    "MOCK AI: Lead Scorer": {
+      "main": [[{ "node": "MOCK AI: Response Generator", "type": "main", "index": 0 }]]
+    },
+    "MOCK AI: Response Generator": {
+      "main": [[{ "node": "Is Qualified?", "type": "main", "index": 0 }]]
+    },
+    "Is Qualified?": {
+      "main": [
+        [{ "node": "MOCK CRM: Log Lead", "type": "main", "index": 0 }],
+        [{ "node": "Continue", "type": "main", "index": 0 }]
+      ]
+    },
+    "MOCK CRM: Log Lead": {
+      "main": [[{ "node": "Is Hot Lead?", "type": "main", "index": 0 }]]
+    },
+    "Is Hot Lead?": {
+      "main": [
+        [{ "node": "MOCK Slack: Escalation", "type": "main", "index": 0 }],
+        [{ "node": "MOCK Email: Nurture", "type": "main", "index": 0 }]
+      ]
+    },
+    "MOCK Slack: Escalation": {
+      "main": [[{ "node": "Merge", "type": "main", "index": 0 }]]
+    },
+    "MOCK Email: Nurture": {
+      "main": [[{ "node": "Merge", "type": "main", "index": 1 }]]
+    },
+    "Merge": {
+      "main": [[{ "node": "Respond to Chat", "type": "main", "index": 0 }]]
+    },
+    "Continue": {
+      "main": [[{ "node": "Respond to Chat", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "chatbot" }, { "name": "mock-ai" }, { "name": "demo" }]
+}

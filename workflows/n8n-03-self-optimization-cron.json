@@ -1,0 +1,94 @@
+{
+  "name": "03 - Self-Optimization (Cron + Mock AI)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Run Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate Mock Metrics Data (simulates reading from database/sheets)\nconst now = new Date();\nconst mockMetrics = [];\n\n// Generate 14 days of mock data\nfor (let i = 0; i < 14; i++) {\n  const date = new Date(now);\n  date.setDate(date.getDate() - i);\n  \n  const leads = Math.floor(Math.random() * 40) + 20;\n  const qualified = Math.floor(leads * (0.3 + Math.random() * 0.3));\n  const converted = Math.floor(qualified * (0.2 + Math.random() * 0.25));\n  \n  mockMetrics.push({\n    date: date.toISOString().split('T')[0],\n    leads,\n    qualified,\n    converted,\n    conversionRate: qualified > 0 ? ((converted / qualified) * 100).toFixed(1) : 0,\n    cpa: (50 + Math.random() * 80).toFixed(2),\n    source: ['chatbot', 'organic', 'referral', 'direct'][Math.floor(Math.random() * 4)]\n  });\n}\n\n// Calculate aggregates\nconst totalLeads = mockMetrics.reduce((s, m) => s + m.leads, 0);\nconst totalQualified = mockMetrics.reduce((s, m) => s + m.qualified, 0);\nconst totalConverted = mockMetrics.reduce((s, m) => s + m.converted, 0);\nconst avgCPA = mockMetrics.reduce((s, m) => s + parseFloat(m.cpa), 0) / mockMetrics.length;\nconst avgConvRate = totalQualified > 0 ? (totalConverted / totalQualified * 100) : 0;\n\n// Calculate trend (last 7 vs previous 7)\nconst recent = mockMetrics.slice(0, 7);\nconst previous = mockMetrics.slice(7, 14);\nconst recentConv = recent.reduce((s, m) => s + parseFloat(m.conversionRate), 0) / 7;\nconst prevConv = previous.reduce((s, m) => s + parseFloat(m.conversionRate), 0) / 7;\nconst trend = recentConv - prevConv;\n\nreturn {\n  json: {\n    _mockService: 'METRICS_DATABASE',\n    fetchedAt: now.toISOString(),\n    period: '14 days',\n    rawMetrics: mockMetrics,\n    aggregates: {\n      totalLeads,\n      totalQualified,\n      totalConverted,\n      avgConversionRate: avgConvRate.toFixed(1),\n      avgCPA: avgCPA.toFixed(2)\n    },\n    trend: {\n      value: trend.toFixed(1),\n      direction: trend > 0 ? 'improving' : trend < 0 ? 'declining' : 'stable'\n    }\n  }\n};"
+      },
+      "id": "mock-read-metrics",
+      "name": "MOCK: Read Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK AI: Analyze Metrics & Generate Optimization Suggestions\nconst data = $input.first().json;\nconst agg = data.aggregates;\nconst trend = data.trend;\n\n// Identify issues\nconst issues = [];\nconst recommendations = [];\n\nif (parseFloat(agg.avgConversionRate) < 30) {\n  issues.push({\n    type: 'LOW_CONVERSION',\n    severity: 'HIGH',\n    message: `Conversion rate (${agg.avgConversionRate}%) below 30% target`\n  });\n  recommendations.push({\n    action: 'ADJUST_QUALIFICATION_THRESHOLD',\n    description: 'Lower score threshold from 50 to 40',\n    expectedImpact: '+8% conversion rate',\n    promptTweak: 'Add more open-ended qualification questions'\n  });\n}\n\nif (parseFloat(agg.avgCPA) > 100) {\n  issues.push({\n    type: 'HIGH_CPA',\n    severity: 'MEDIUM',\n    message: `CPA ($${agg.avgCPA}) exceeds $100 target`\n  });\n  recommendations.push({\n    action: 'OPTIMIZE_LEAD_SOURCES',\n    description: 'Increase chatbot allocation, reduce paid channels',\n    expectedImpact: '-25% CPA',\n    promptTweak: 'Move budget question earlier in conversation'\n  });\n}\n\nif (parseFloat(trend.value) < -5) {\n  issues.push({\n    type: 'DECLINING_TREND',\n    severity: 'HIGH',\n    message: `Performance declining ${Math.abs(trend.value)}% week-over-week`\n  });\n  recommendations.push({\n    action: 'EMERGENCY_REVIEW',\n    description: 'Review recent changes, consider A/B test rollback',\n    expectedImpact: 'Stabilize performance',\n    promptTweak: 'Revert to previous prompt version'\n  });\n}\n\nif (issues.length === 0) {\n  recommendations.push({\n    action: 'MAINTAIN_CURRENT',\n    description: 'All metrics within acceptable ranges',\n    expectedImpact: 'Continued growth',\n    promptTweak: 'No changes needed'\n  });\n}\n\nconst optimizationDecision = {\n  _mockAI: 'optimization-engine-v1',\n  analyzedAt: new Date().toISOString(),\n  metricsSnapshot: agg,\n  trendAnalysis: trend,\n  issuesFound: issues,\n  recommendations,\n  decision: {\n    requiresAction: issues.some(i => i.severity === 'HIGH'),\n    approvalRequired: true,\n    autoImplement: false\n  }\n};\n\nreturn { json: optimizationDecision };"
+      },
+      "id": "mock-ai-optimizer",
+      "name": "MOCK AI: Optimization Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.decision.requiresAction }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "needs-action",
+      "name": "Needs Action?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK: Log Optimization Decision (simulates Slack notification)\nconst data = $input.first().json;\n\nconst notificationLog = {\n  _mockService: 'SLACK_NOTIFICATION',\n  channel: '#optimization-alerts',\n  timestamp: new Date().toISOString(),\n  alert: {\n    type: 'OPTIMIZATION_REQUIRED',\n    title: '⚙️ Self-Optimization Report',\n    metrics: data.metricsSnapshot,\n    trend: data.trendAnalysis,\n    issues: data.issuesFound.map(i => `[${i.severity}] ${i.message}`),\n    recommendations: data.recommendations.map(r => `• ${r.action}: ${r.description}`),\n    actions: ['Approve All', 'Review Details', 'Dismiss']\n  },\n  response: {\n    status: 'LOGGED',\n    notificationId: 'opt-notify-' + Date.now()\n  }\n};\n\nconsole.log('OPTIMIZATION LOG:', JSON.stringify(notificationLog, null, 2));\n\nreturn {\n  json: {\n    ...data,\n    notificationLog\n  }\n};"
+      },
+      "id": "log-optimization",
+      "name": "LOG: Optimization Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log healthy status\nconst data = $input.first().json;\n\nconst healthLog = {\n  _mockService: 'HEALTH_LOG',\n  timestamp: new Date().toISOString(),\n  status: 'HEALTHY',\n  message: 'All metrics within acceptable ranges',\n  metrics: data.metricsSnapshot,\n  nextCheck: new Date(Date.now() + 6*60*60*1000).toISOString()\n};\n\nconsole.log('HEALTH LOG:', JSON.stringify(healthLog, null, 2));\n\nreturn { json: healthLog };"
+      },
+      "id": "log-healthy",
+      "name": "LOG: Healthy Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 400]
+    }
+  ],
+  "connections": {
+    "Run Every 6 Hours": {
+      "main": [[{ "node": "MOCK: Read Metrics", "type": "main", "index": 0 }]]
+    },
+    "MOCK: Read Metrics": {
+      "main": [[{ "node": "MOCK AI: Optimization Engine", "type": "main", "index": 0 }]]
+    },
+    "MOCK AI: Optimization Engine": {
+      "main": [[{ "node": "Needs Action?", "type": "main", "index": 0 }]]
+    },
+    "Needs Action?": {
+      "main": [
+        [{ "node": "LOG: Optimization Decision", "type": "main", "index": 0 }],
+        [{ "node": "LOG: Healthy Status", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "scheduled" }, { "name": "optimization" }, { "name": "mock-ai" }]
+}

@@ -1,0 +1,295 @@
+{
+  "name": "04 - Dynamic Workflow Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-workflow",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "workflow-gen-webhook",
+      "name": "Workflow Generator Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "workflow-generator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the workflow generation request\nconst input = $input.first().json;\n\nconst request = {\n  requestId: 'wf-gen-' + Date.now(),\n  requestType: input.body?.type || input.type || 'follow-up',\n  description: input.body?.description || input.description || 'Create a follow-up workflow',\n  parameters: input.body?.parameters || input.parameters || {},\n  timestamp: new Date().toISOString()\n};\n\n// Available workflow templates\nconst templates = {\n  'follow-up': {\n    name: 'Follow-up Sequence',\n    description: 'Automated follow-up emails after initial contact',\n    requiredParams: ['delayDays', 'maxEmails', 'targetEmail']\n  },\n  'nurture': {\n    name: 'Lead Nurture Campaign',\n    description: 'Multi-touch nurture sequence for warm leads',\n    requiredParams: ['campaignLength', 'contentType']\n  },\n  'escalation': {\n    name: 'Escalation Workflow',\n    description: 'Automatic escalation based on conditions',\n    requiredParams: ['triggerCondition', 'escalationTarget']\n  },\n  'notification': {\n    name: 'Custom Notification',\n    description: 'Multi-channel notification workflow',\n    requiredParams: ['channels', 'message']\n  }\n};\n\nrequest.templateInfo = templates[request.requestType] || templates['follow-up'];\n\nreturn { json: request };"
+      },
+      "id": "parse-gen-request",
+      "name": "Parse Generation Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 2000
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an n8n workflow architect. Generate valid n8n workflow JSON snippets based on user requirements.\n\nYou must output ONLY valid JSON that can be imported into n8n. The structure should include:\n- name: workflow name\n- nodes: array of node definitions\n- connections: object defining node connections\n\nEach node needs: id, name, type, typeVersion, position, parameters.\n\nCommon node types:\n- n8n-nodes-base.scheduleTrigger (for time-based triggers)\n- n8n-nodes-base.httpRequest (for API calls)\n- n8n-nodes-base.code (for JavaScript logic)\n- n8n-nodes-base.if (for conditionals)\n- n8n-nodes-base.wait (for delays)\n- n8n-nodes-base.sendEmail (for emails)\n\nGenerate practical, working workflows."
+            },
+            {
+              "role": "user",
+              "content": "Generate an n8n workflow for: {{ $json.description }}\n\nType: {{ $json.requestType }}\nTemplate: {{ $json.templateInfo.name }}\nParameters: {{ JSON.stringify($json.parameters) }}\n\nOutput ONLY the JSON workflow definition, nothing else."
+            }
+          ]
+        }
+      },
+      "id": "generate-workflow-json",
+      "name": "Generate Workflow JSON",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate the generated workflow JSON\nconst request = $('Parse Generation Request').item.json;\nconst aiResponse = $input.first().json.message?.content || $input.first().json.text || '{}';\n\nlet generatedWorkflow = null;\nlet validationErrors = [];\nlet isValid = false;\n\ntry {\n  // Try to extract JSON from the response\n  let jsonStr = aiResponse;\n  \n  // Handle markdown code blocks\n  const jsonMatch = aiResponse.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\n  if (jsonMatch) {\n    jsonStr = jsonMatch[1].trim();\n  }\n  \n  generatedWorkflow = JSON.parse(jsonStr);\n  \n  // Validate required fields\n  if (!generatedWorkflow.name) {\n    validationErrors.push('Missing workflow name');\n  }\n  if (!generatedWorkflow.nodes || !Array.isArray(generatedWorkflow.nodes)) {\n    validationErrors.push('Missing or invalid nodes array');\n  }\n  if (!generatedWorkflow.connections || typeof generatedWorkflow.connections !== 'object') {\n    validationErrors.push('Missing or invalid connections object');\n  }\n  \n  // Validate node structure\n  if (generatedWorkflow.nodes) {\n    for (const node of generatedWorkflow.nodes) {\n      if (!node.id || !node.name || !node.type) {\n        validationErrors.push(`Invalid node structure: ${JSON.stringify(node).substring(0, 50)}...`);\n      }\n    }\n  }\n  \n  isValid = validationErrors.length === 0;\n  \n  // Add metadata\n  if (isValid) {\n    generatedWorkflow.meta = {\n      generatedAt: new Date().toISOString(),\n      requestId: request.requestId,\n      requestType: request.requestType,\n      autoGenerated: true\n    };\n    generatedWorkflow.active = false;\n    generatedWorkflow.settings = { executionOrder: 'v1' };\n  }\n  \n} catch (parseError) {\n  validationErrors.push(`JSON parse error: ${parseError.message}`);\n  \n  // Generate a fallback template if parsing fails\n  generatedWorkflow = generateFallbackWorkflow(request);\n  isValid = true; // Fallback is always valid\n}\n\n// Fallback workflow generator\nfunction generateFallbackWorkflow(req) {\n  const baseId = Date.now();\n  \n  if (req.requestType === 'follow-up') {\n    return {\n      name: `Generated: ${req.templateInfo.name}`,\n      nodes: [\n        {\n          id: `trigger-${baseId}`,\n          name: 'Start',\n          type: 'n8n-nodes-base.manualTrigger',\n          typeVersion: 1,\n          position: [240, 300],\n          parameters: {}\n        },\n        {\n          id: `wait-${baseId}`,\n          name: 'Wait 3 Days',\n          type: 'n8n-nodes-base.wait',\n          typeVersion: 1.1,\n          position: [460, 300],\n          parameters: {\n            amount: req.parameters.delayDays || 3,\n            unit: 'days'\n          }\n        },\n        {\n          id: `email-${baseId}`,\n          name: 'Send Follow-up Email',\n          type: 'n8n-nodes-base.emailSend',\n          typeVersion: 2.1,\n          position: [680, 300],\n          parameters: {\n            toEmail: '={{ $json.email }}',\n            subject: 'Following up on our conversation',\n            emailType: 'text',\n            message: 'Hi {{ $json.name }},\\n\\nI wanted to follow up on our recent conversation. Is there anything I can help you with?\\n\\nBest regards'\n          }\n        }\n      ],\n      connections: {\n        'Start': { main: [[{ node: 'Wait 3 Days', type: 'main', index: 0 }]] },\n        'Wait 3 Days': { main: [[{ node: 'Send Follow-up Email', type: 'main', index: 0 }]] }\n      },\n      meta: {\n        generatedAt: new Date().toISOString(),\n        requestId: req.requestId,\n        requestType: req.requestType,\n        autoGenerated: true,\n        isFallback: true\n      },\n      active: false,\n      settings: { executionOrder: 'v1' }\n    };\n  }\n  \n  // Generic fallback\n  return {\n    name: `Generated: ${req.templateInfo.name}`,\n    nodes: [\n      {\n        id: `trigger-${baseId}`,\n        name: 'Manual Trigger',\n        type: 'n8n-nodes-base.manualTrigger',\n        typeVersion: 1,\n        position: [240, 300],\n        parameters: {}\n      },\n      {\n        id: `code-${baseId}`,\n        name: 'Process Logic',\n        type: 'n8n-nodes-base.code',\n        typeVersion: 2,\n        position: [460, 300],\n        parameters: {\n          jsCode: '// Add your logic here\\nreturn $input.all();'\n        }\n      }\n    ],\n    connections: {\n      'Manual Trigger': { main: [[{ node: 'Process Logic', type: 'main', index: 0 }]] }\n    },\n    meta: {\n      generatedAt: new Date().toISOString(),\n      requestId: req.requestId,\n      requestType: req.requestType,\n      autoGenerated: true,\n      isFallback: true\n    },\n    active: false,\n    settings: { executionOrder: 'v1' }\n  };\n}\n\nreturn {\n  json: {\n    requestId: request.requestId,\n    requestType: request.requestType,\n    description: request.description,\n    isValid,\n    validationErrors,\n    workflow: generatedWorkflow,\n    approvalRequired: true,\n    generatedAt: new Date().toISOString()\n  }\n};"
+      },
+      "id": "validate-workflow",
+      "name": "Validate & Enhance Workflow",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "is-valid-workflow",
+      "name": "Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ blocks: [{ type: 'header', text: { type: 'plain_text', text: ':robot_face: New Workflow Generated', emoji: true } }, { type: 'section', text: { type: 'mrkdwn', text: '*Request:* ' + $json.description } }, { type: 'section', fields: [{ type: 'mrkdwn', text: '*Type:*\\n' + $json.requestType }, { type: 'mrkdwn', text: '*Status:*\\n' + ($json.isValid ? 'Valid' : 'Invalid') }] }, { type: 'section', text: { type: 'mrkdwn', text: '*Workflow Name:*\\n' + ($json.workflow?.name || 'N/A') } }, { type: 'section', text: { type: 'mrkdwn', text: '*Nodes:*\\n' + ($json.workflow?.nodes?.map(n => '- ' + n.name).join('\\n') || 'None') } }, { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Approve & Import' }, style: 'primary', action_id: 'approve_workflow_' + $json.requestId }, { type: 'button', text: { type: 'plain_text', text: 'Reject' }, style: 'danger', action_id: 'reject_workflow_' + $json.requestId }] }] }) }}",
+        "options": {}
+      },
+      "id": "notify-workflow-ready",
+      "name": "Notify: Workflow Ready for Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, requestId: $json.requestId, message: 'Workflow generated successfully', workflow: $json.workflow, approvalRequired: true }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond: Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, requestId: $json.requestId, message: 'Workflow validation failed', errors: $json.validationErrors }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "responseCode": 400
+        }
+      },
+      "id": "respond-error",
+      "name": "Respond: Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/GeneratedWorkflows!A:F:append",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $json.generatedAt, $json.requestId, $json.requestType, $json.description, $json.isValid ? 'VALID' : 'INVALID', $json.workflow?.name || 'N/A' ]] }) }}",
+        "options": {}
+      },
+      "id": "log-generated-workflow",
+      "name": "Log Generated Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 50],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Workflow Generator Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Generation Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Generation Request": {
+      "main": [
+        [
+          {
+            "node": "Generate Workflow JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Workflow JSON": {
+      "main": [
+        [
+          {
+            "node": "Validate & Enhance Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Enhance Workflow": {
+      "main": [
+        [
+          {
+            "node": "Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Notify: Workflow Ready for Approval",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Generated Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond: Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify: Workflow Ready for Approval": {
+      "main": [
+        [
+          {
+            "node": "Respond: Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "generator"
+    },
+    {
+      "name": "dynamic"
+    },
+    {
+      "name": "ai-powered"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "intelligent-automation-system"
+  }
+}

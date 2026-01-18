@@ -1,0 +1,115 @@
+{
+  "system": {
+    "name": "Intelligent Automation System",
+    "version": "1.0.0",
+    "description": "AI-powered lead management and growth automation"
+  },
+  "workflows": {
+    "chatbot": {
+      "id": "01-chatbot-lead-qualification",
+      "enabled": true,
+      "description": "Public-facing chatbot with LLM-powered responses and lead scoring"
+    },
+    "aiCouncil": {
+      "id": "02-ai-council-multi-agent",
+      "enabled": true,
+      "description": "Multi-agent AI decision system with researcher, strategist, and optimizer"
+    },
+    "selfOptimization": {
+      "id": "03-self-optimization-scheduler",
+      "enabled": true,
+      "schedule": "every 6 hours",
+      "description": "Automated performance analysis and optimization recommendations"
+    },
+    "workflowGenerator": {
+      "id": "04-dynamic-workflow-generator",
+      "enabled": true,
+      "description": "AI-powered workflow generation based on user requests"
+    },
+    "metricsGrowth": {
+      "id": "05-metrics-dashboard-growth",
+      "enabled": true,
+      "description": "Metrics tracking, ROI calculation, and organic growth activities"
+    }
+  },
+  "integrations": {
+    "openai": {
+      "required": true,
+      "model": "gpt-4o-mini",
+      "usage": "Chat responses, AI council, workflow generation, optimization suggestions"
+    },
+    "hubspot": {
+      "required": false,
+      "tier": "free",
+      "usage": "CRM contact creation for qualified leads"
+    },
+    "sendgrid": {
+      "required": false,
+      "tier": "free",
+      "usage": "Nurture email sequences for hot leads"
+    },
+    "slack": {
+      "required": false,
+      "tier": "free",
+      "usage": "Hot lead alerts, optimization notifications, workflow approvals"
+    },
+    "googleSheets": {
+      "required": false,
+      "tier": "free",
+      "usage": "Metrics logging, ROI tracking, optimization history"
+    }
+  },
+  "thresholds": {
+    "leadScoring": {
+      "hot": 70,
+      "warm": 50,
+      "cold": 0
+    },
+    "alerts": {
+      "lowConversionRate": 30,
+      "highCPA": 100,
+      "decliningTrendThreshold": -5
+    },
+    "optimization": {
+      "triggerWhenConversionBelow": 30,
+      "triggerWhenCPAAbove": 100
+    }
+  },
+  "scheduledTasks": {
+    "metricsUpdate": {
+      "frequency": "hourly",
+      "description": "Update metrics snapshot"
+    },
+    "selfOptimization": {
+      "frequency": "every 6 hours",
+      "description": "Analyze performance and suggest optimizations"
+    },
+    "organicGrowth": {
+      "frequency": "daily at 9am",
+      "description": "Run organic growth activities and ROI calculations"
+    }
+  },
+  "credentials": {
+    "note": "Replace placeholder IDs with actual credential IDs in n8n",
+    "placeholders": {
+      "OPENAI_CREDENTIAL_ID": "Your OpenAI API credential ID",
+      "HUBSPOT_CREDENTIAL_ID": "Your HubSpot API credential ID",
+      "SENDGRID_CREDENTIAL_ID": "Your SendGrid API credential ID",
+      "GOOGLE_CREDENTIAL_ID": "Your Google Sheets OAuth2 credential ID",
+      "YOUR_SPREADSHEET_ID": "Your Google Sheets spreadsheet ID",
+      "YOUR/WEBHOOK/URL": "Your Slack webhook URL"
+    }
+  },
+  "sheets": {
+    "structure": {
+      "Leads": ["Timestamp", "SessionID", "Score", "Temperature", "Goal", "Budget", "Industry", "Email"],
+      "CouncilDecisions": ["Timestamp", "RequestID", "Query", "Priority", "Confidence", "ActionRequired"],
+      "OptimizationLog": ["Timestamp", "ConversionRate", "CPA", "Trend", "ActionsCount", "Status"],
+      "HealthLog": ["Timestamp", "Status", "ConversionRate", "CPA", "Trend"],
+      "HourlyMetrics": ["Timestamp", "Leads", "Conversations", "QualRate", "ResponseTime", "HotLeads", "AutoSuccess", "Efficiency", "CPA", "ProjectedRevenue"],
+      "GrowthActivities": ["Timestamp", "Count", "Summary", "OrganicChange", "ReferralChange", "DomainAuthority"],
+      "ROITracking": ["Timestamp", "Cost", "LaborSavings", "ReferralRev", "LeadValue", "TotalBenefit", "ROI"],
+      "GeneratedWorkflows": ["Timestamp", "RequestID", "Type", "Description", "Status", "Name"]
+    }
+  }
+}

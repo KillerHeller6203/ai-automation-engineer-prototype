@@ -1,0 +1,378 @@
+{
+  "name": "01 - Chatbot Lead Qualification Hub",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "chat-trigger",
+      "name": "Chat Trigger",
+      "type": "n8n-nodes-base.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "chatbot-lead-gen"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract user input and session context\nconst userMessage = $input.first().json.chatInput || $input.first().json.body?.message || '';\nconst sessionId = $input.first().json.sessionId || 'default-session';\n\n// Initialize or retrieve conversation state\nlet conversationState = {\n  stage: 'initial',\n  collectedData: {\n    goal: null,\n    budget: null,\n    timeline: null,\n    industry: null,\n    contactEmail: null\n  },\n  qualificationScore: 0,\n  messageHistory: []\n};\n\n// Parse user intent from message\nfunction detectIntent(message) {\n  const lowerMsg = message.toLowerCase();\n  \n  // Budget detection\n  const budgetMatch = lowerMsg.match(/\\$?([\\d,]+)(?:k|\\s*thousand)?|budget\\s*(?:is|of)?\\s*\\$?([\\d,]+)/i);\n  if (budgetMatch) {\n    let budget = parseInt((budgetMatch[1] || budgetMatch[2]).replace(/,/g, ''));\n    if (lowerMsg.includes('k') || lowerMsg.includes('thousand')) budget *= 1000;\n    return { type: 'budget', value: budget };\n  }\n  \n  // Goal detection\n  const goalKeywords = ['lead gen', 'lead generation', 'sales', 'marketing', 'growth', 'automation', 'optimize', 'scale'];\n  for (const keyword of goalKeywords) {\n    if (lowerMsg.includes(keyword)) {\n      return { type: 'goal', value: keyword };\n    }\n  }\n  \n  // Timeline detection\n  const timelineMatch = lowerMsg.match(/(\\d+)\\s*(day|week|month|quarter|year)/i);\n  if (timelineMatch) {\n    return { type: 'timeline', value: `${timelineMatch[1]} ${timelineMatch[2]}s` };\n  }\n  \n  // Email detection\n  const emailMatch = lowerMsg.match(/[\\w.-]+@[\\w.-]+\\.\\w+/i);\n  if (emailMatch) {\n    return { type: 'contactEmail', value: emailMatch[0] };\n  }\n  \n  // Industry detection\n  const industries = ['tech', 'technology', 'healthcare', 'finance', 'retail', 'ecommerce', 'saas', 'b2b', 'b2c', 'manufacturing'];\n  for (const ind of industries) {\n    if (lowerMsg.includes(ind)) {\n      return { type: 'industry', value: ind };\n    }\n  }\n  \n  return { type: 'unknown', value: message };\n}\n\n// Calculate qualification score (0-100)\nfunction calculateScore(data) {\n  let score = 0;\n  \n  // Goal provided: +20\n  if (data.goal) score += 20;\n  \n  // Budget scoring: higher budget = higher score\n  if (data.budget) {\n    if (data.budget >= 50000) score += 30;\n    else if (data.budget >= 20000) score += 25;\n    else if (data.budget >= 5000) score += 15;\n    else score += 10;\n  }\n  \n  // Timeline: shorter = higher urgency\n  if (data.timeline) {\n    if (data.timeline.includes('week') || data.timeline.includes('day')) score += 20;\n    else if (data.timeline.includes('month')) score += 15;\n    else score += 10;\n  }\n  \n  // Industry provided: +10\n  if (data.industry) score += 10;\n  \n  // Contact email provided: +20 (shows intent)\n  if (data.contactEmail) score += 20;\n  \n  return Math.min(score, 100);\n}\n\n// Determine next question based on missing data\nfunction getNextQuestion(data) {\n  if (!data.goal) return 'What is your primary goal? (e.g., lead generation, sales automation, growth scaling)';\n  if (!data.budget) return 'What budget range are you considering for this initiative?';\n  if (!data.timeline) return 'What is your ideal timeline for implementation?';\n  if (!data.industry) return 'What industry or sector does your business operate in?';\n  if (!data.contactEmail) return 'Great! Could you share your email so we can send you relevant resources?';\n  return null; // All data collected\n}\n\n// Process current message\nconst intent = detectIntent(userMessage);\nif (intent.type !== 'unknown') {\n  conversationState.collectedData[intent.type] = intent.value;\n}\n\nconversationState.qualificationScore = calculateScore(conversationState.collectedData);\nconversationState.messageHistory.push({ role: 'user', content: userMessage });\n\nconst nextQuestion = getNextQuestion(conversationState.collectedData);\nconst isQualified = conversationState.qualificationScore >= 50;\nconst isComplete = nextQuestion === null;\n\n// Determine lead temperature\nlet leadTemperature = 'cold';\nif (conversationState.qualificationScore >= 70) leadTemperature = 'hot';\nelse if (conversationState.qualificationScore >= 50) leadTemperature = 'warm';\n\nreturn {\n  json: {\n    sessionId,\n    userMessage,\n    detectedIntent: intent,\n    conversationState,\n    qualificationScore: conversationState.qualificationScore,\n    leadTemperature,\n    isQualified,\n    isComplete,\n    nextQuestion,\n    collectedData: conversationState.collectedData,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "input-processor",
+      "name": "Process User Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 500
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are an intelligent lead qualification assistant. Your role is to:\n1. Engage users naturally and professionally\n2. Gather information about their goals, budget, timeline, and needs\n3. Provide helpful responses while qualifying leads\n4. Be conversational but efficient\n\nContext from current conversation:\n- Collected Data: {{ JSON.stringify($json.collectedData) }}\n- Qualification Score: {{ $json.qualificationScore }}/100\n- Lead Temperature: {{ $json.leadTemperature }}\n\nIf there's a next question to ask, incorporate it naturally. If qualification is complete, summarize what you've learned and explain next steps."
+            },
+            {
+              "role": "user",
+              "content": "User said: {{ $json.userMessage }}\n\nNext question to incorporate (if any): {{ $json.nextQuestion || 'None - qualification complete' }}"
+            }
+          ]
+        }
+      },
+      "id": "openai-chat",
+      "name": "OpenAI Chat Response",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $('Process User Input').item.json.isQualified }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "qualification-check",
+      "name": "Is Qualified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": ""
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $('Process User Input').item.json.leadTemperature }}",
+              "rightValue": "hot",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "hot-lead-check",
+      "name": "Is Hot Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/contacts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "properties",
+              "value": "={{ JSON.stringify({ email: $('Process User Input').item.json.collectedData.contactEmail || 'lead-' + Date.now() + '@placeholder.com', lead_status: $('Process User Input').item.json.leadTemperature.toUpperCase(), industry: $('Process User Input').item.json.collectedData.industry || 'Not specified', hs_lead_status: $('Process User Input').item.json.leadTemperature === 'hot' ? 'QUALIFIED' : 'OPEN', notes: 'Goal: ' + ($('Process User Input').item.json.collectedData.goal || 'N/A') + ' | Budget: ' + ($('Process User Input').item.json.collectedData.budget || 'N/A') + ' | Score: ' + $('Process User Input').item.json.qualificationScore }) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "hubspot-create-contact",
+      "name": "Create HubSpot Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 100],
+      "credentials": {
+        "hubspotApi": {
+          "id": "HUBSPOT_CREDENTIAL_ID",
+          "name": "HubSpot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendGridApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ personalizations: [{ to: [{ email: $('Process User Input').item.json.collectedData.contactEmail || 'test@example.com' }], dynamic_template_data: { goal: $('Process User Input').item.json.collectedData.goal || 'your goals', score: $('Process User Input').item.json.qualificationScore } }], from: { email: 'noreply@yourdomain.com', name: 'Growth Automation Team' }, subject: 'Your Personalized Growth Plan is Ready!', content: [{ type: 'text/html', value: '<h2>Thank you for your interest!</h2><p>Based on your goal of <strong>' + ($('Process User Input').item.json.collectedData.goal || 'growth') + '</strong>, we have prepared a customized approach.</p><p>Your qualification score: <strong>' + $('Process User Input').item.json.qualificationScore + '/100</strong></p><p>A specialist will reach out within 24 hours to discuss next steps.</p>' }] }) }}",
+        "options": {}
+      },
+      "id": "sendgrid-nurture-email",
+      "name": "Send Nurture Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 100],
+      "credentials": {
+        "sendGridApi": {
+          "id": "SENDGRID_CREDENTIAL_ID",
+          "name": "SendGrid API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ blocks: [{ type: 'header', text: { type: 'plain_text', text: ':fire: HOT LEAD ALERT - Immediate Action Required', emoji: true } }, { type: 'section', fields: [{ type: 'mrkdwn', text: '*Score:*\\n' + $('Process User Input').item.json.qualificationScore + '/100' }, { type: 'mrkdwn', text: '*Temperature:*\\n' + $('Process User Input').item.json.leadTemperature.toUpperCase() }] }, { type: 'section', fields: [{ type: 'mrkdwn', text: '*Goal:*\\n' + ($('Process User Input').item.json.collectedData.goal || 'N/A') }, { type: 'mrkdwn', text: '*Budget:*\\n$' + ($('Process User Input').item.json.collectedData.budget || 'N/A') }] }, { type: 'section', fields: [{ type: 'mrkdwn', text: '*Industry:*\\n' + ($('Process User Input').item.json.collectedData.industry || 'N/A') }, { type: 'mrkdwn', text: '*Email:*\\n' + ($('Process User Input').item.json.collectedData.contactEmail || 'N/A') }] }, { type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Approve & Assign' }, style: 'primary', action_id: 'approve_lead' }, { type: 'button', text: { type: 'plain_text', text: 'Review Later' }, action_id: 'review_lead' }] }] }) }}",
+        "options": {}
+      },
+      "id": "slack-hot-lead-alert",
+      "name": "Slack Hot Lead Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('OpenAI Chat Response').item.json.message?.content || $('OpenAI Chat Response').item.json.text || 'Thank you for your message! How can I help you today?' }}",
+        "options": {}
+      },
+      "id": "respond-to-user",
+      "name": "Respond to User",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/Leads!A:H:append",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ new Date().toISOString(), $('Process User Input').item.json.sessionId, $('Process User Input').item.json.qualificationScore, $('Process User Input').item.json.leadTemperature, $('Process User Input').item.json.collectedData.goal || '', $('Process User Input').item.json.collectedData.budget || '', $('Process User Input').item.json.collectedData.industry || '', $('Process User Input').item.json.collectedData.contactEmail || '' ]] }) }}",
+        "options": {}
+      },
+      "id": "log-to-sheets",
+      "name": "Log Lead to Sheets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 500],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Process User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process User Input": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Chat Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Lead to Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Response": {
+      "main": [
+        [
+          {
+            "node": "Is Qualified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Qualified?": {
+      "main": [
+        [
+          {
+            "node": "Is Hot Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Hot Lead?": {
+      "main": [
+        [
+          {
+            "node": "Create HubSpot Contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create HubSpot Contact": {
+      "main": [
+        [
+          {
+            "node": "Send Nurture Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Nurture Email": {
+      "main": [
+        [
+          {
+            "node": "Slack Hot Lead Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Hot Lead Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "lead-generation"
+    },
+    {
+      "name": "chatbot"
+    },
+    {
+      "name": "automation"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "intelligent-automation-system"
+  }
+}

@@ -1,0 +1,372 @@
+{
+  "name": "05 - Metrics Dashboard & Organic Growth",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "hourly-metrics-trigger",
+      "name": "Hourly Metrics Update",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 200]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "daily-growth-trigger",
+      "name": "Daily Growth Tasks",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate current metrics snapshot\nconst timestamp = new Date().toISOString();\n\n// Simulate real-time metrics (in production, fetch from actual sources)\nconst mockMetrics = {\n  timestamp,\n  hourlyLeads: Math.floor(Math.random() * 10) + 2,\n  activeConversations: Math.floor(Math.random() * 5) + 1,\n  qualificationRate: (40 + Math.random() * 30).toFixed(1),\n  avgResponseTime: (Math.random() * 3 + 0.5).toFixed(2),\n  hotLeadsToday: Math.floor(Math.random() * 3),\n  automationSuccess: (85 + Math.random() * 14).toFixed(1)\n};\n\n// Calculate derived metrics\nmockMetrics.efficiency = ((parseFloat(mockMetrics.automationSuccess) * parseFloat(mockMetrics.qualificationRate)) / 100).toFixed(1);\nmockMetrics.estimatedCPA = (50 + Math.random() * 50).toFixed(2);\nmockMetrics.projectedMonthlyRevenue = (mockMetrics.hourlyLeads * 24 * 30 * 0.25 * 1500).toFixed(0);\n\nreturn { json: mockMetrics };"
+      },
+      "id": "calculate-metrics",
+      "name": "Calculate Metrics Snapshot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/HourlyMetrics!A:K:append",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $json.timestamp, $json.hourlyLeads, $json.activeConversations, $json.qualificationRate, $json.avgResponseTime, $json.hotLeadsToday, $json.automationSuccess, $json.efficiency, $json.estimatedCPA, $json.projectedMonthlyRevenue ]] }) }}",
+        "options": {}
+      },
+      "id": "log-hourly-metrics",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": ""
+          },
+          "combinator": "or",
+          "conditions": [
+            {
+              "leftValue": "={{ parseFloat($('Calculate Metrics Snapshot').item.json.qualificationRate) }}",
+              "rightValue": 35,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            },
+            {
+              "leftValue": "={{ parseFloat($('Calculate Metrics Snapshot').item.json.estimatedCPA) }}",
+              "rightValue": 90,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-alerts",
+      "name": "Check Alert Thresholds",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ blocks: [{ type: 'header', text: { type: 'plain_text', text: ':warning: Metrics Alert', emoji: true } }, { type: 'section', text: { type: 'mrkdwn', text: '*Performance metrics below threshold detected*' } }, { type: 'section', fields: [{ type: 'mrkdwn', text: '*Qualification Rate:*\\n' + $('Calculate Metrics Snapshot').item.json.qualificationRate + '%' }, { type: 'mrkdwn', text: '*Estimated CPA:*\\n$' + $('Calculate Metrics Snapshot').item.json.estimatedCPA }] }] }) }}",
+        "options": {}
+      },
+      "id": "send-metrics-alert",
+      "name": "Send Metrics Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Simulate organic growth activities\n// In production, these would be actual API calls to directories, platforms, etc.\n\nconst timestamp = new Date().toISOString();\nconst activities = [];\n\n// Simulated directory submissions\nconst directories = [\n  { name: 'Product Hunt', type: 'directory', simulated: true },\n  { name: 'G2 Crowd', type: 'review_platform', simulated: true },\n  { name: 'Capterra', type: 'software_directory', simulated: true },\n  { name: 'AlternativeTo', type: 'comparison_site', simulated: true }\n];\n\n// Select random directories for today\nconst todayDirectories = directories\n  .sort(() => Math.random() - 0.5)\n  .slice(0, Math.floor(Math.random() * 2) + 1);\n\nfor (const dir of todayDirectories) {\n  activities.push({\n    type: 'DIRECTORY_SUBMISSION',\n    platform: dir.name,\n    platformType: dir.type,\n    status: 'simulated',\n    timestamp,\n    expectedImpact: {\n      referralTraffic: Math.floor(Math.random() * 50) + 10,\n      brandMentions: Math.floor(Math.random() * 5) + 1\n    }\n  });\n}\n\n// Simulated referral program activity\nactivities.push({\n  type: 'REFERRAL_TRACKING',\n  newReferrals: Math.floor(Math.random() * 5),\n  pendingPayouts: Math.floor(Math.random() * 3),\n  totalReferralRevenue: Math.floor(Math.random() * 1000) + 200,\n  timestamp\n});\n\n// Simulated content syndication\nactivities.push({\n  type: 'CONTENT_SYNDICATION',\n  articlesPublished: Math.floor(Math.random() * 2),\n  socialShares: Math.floor(Math.random() * 50) + 10,\n  backlinksGenerated: Math.floor(Math.random() * 3),\n  timestamp\n});\n\n// Calculate growth metrics\nconst growthMetrics = {\n  organicTrafficChange: (Math.random() * 10 - 2).toFixed(1) + '%',\n  referralTrafficChange: (Math.random() * 15 - 5).toFixed(1) + '%',\n  brandSearchVolume: Math.floor(Math.random() * 100) + 50,\n  domainAuthorityEstimate: Math.floor(Math.random() * 20) + 30\n};\n\nreturn {\n  json: {\n    timestamp,\n    activitiesCount: activities.length,\n    activities,\n    growthMetrics,\n    summary: `${todayDirectories.length} directory submissions, ${activities.find(a => a.type === 'REFERRAL_TRACKING')?.newReferrals || 0} new referrals`\n  }\n};"
+      },
+      "id": "run-growth-activities",
+      "name": "Run Organic Growth Activities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Simulated",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ simulation: true, type: 'directory_submission', payload: $json.activities.filter(a => a.type === 'DIRECTORY_SUBMISSION') }) }}",
+        "options": {}
+      },
+      "id": "mock-directory-api",
+      "name": "Mock Directory API Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/GrowthActivities!A:F:append",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $('Run Organic Growth Activities').item.json.timestamp, $('Run Organic Growth Activities').item.json.activitiesCount, $('Run Organic Growth Activities').item.json.summary, $('Run Organic Growth Activities').item.json.growthMetrics.organicTrafficChange, $('Run Organic Growth Activities').item.json.growthMetrics.referralTrafficChange, $('Run Organic Growth Activities').item.json.growthMetrics.domainAuthorityEstimate ]] }) }}",
+        "options": {}
+      },
+      "id": "log-growth-activities",
+      "name": "Log Growth Activities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 500],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate ROI simulation metrics\nconst growthData = $('Run Organic Growth Activities').item.json;\n\n// Simulated cost assumptions\nconst costAssumptions = {\n  toolsCost: 200, // Monthly n8n, API costs\n  laborHoursSaved: 40, // Hours of manual work automated\n  laborCostPerHour: 50,\n  averageLeadValue: 500,\n  conversionRate: 0.25\n};\n\n// Calculate ROI metrics\nconst laborSavings = costAssumptions.laborHoursSaved * costAssumptions.laborCostPerHour;\nconst referralRevenue = growthData.activities.find(a => a.type === 'REFERRAL_TRACKING')?.totalReferralRevenue || 0;\nconst estimatedLeadValue = growthData.growthMetrics.brandSearchVolume * 0.1 * costAssumptions.averageLeadValue * costAssumptions.conversionRate;\n\nconst totalBenefit = laborSavings + referralRevenue + estimatedLeadValue;\nconst roi = ((totalBenefit - costAssumptions.toolsCost) / costAssumptions.toolsCost * 100).toFixed(1);\n\nreturn {\n  json: {\n    timestamp: new Date().toISOString(),\n    roiMetrics: {\n      monthlyCost: costAssumptions.toolsCost,\n      laborSavings,\n      referralRevenue,\n      estimatedLeadValue: estimatedLeadValue.toFixed(2),\n      totalMonthlyBenefit: totalBenefit.toFixed(2),\n      roi: roi + '%',\n      paybackPeriod: totalBenefit > costAssumptions.toolsCost ? 'Immediate' : 'N/A'\n    },\n    assumptions: costAssumptions\n  }\n};"
+      },
+      "id": "calculate-roi",
+      "name": "Calculate ROI Simulation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/ROITracking!A:G:append",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $json.timestamp, $json.roiMetrics.monthlyCost, $json.roiMetrics.laborSavings, $json.roiMetrics.referralRevenue, $json.roiMetrics.estimatedLeadValue, $json.roiMetrics.totalMonthlyBenefit, $json.roiMetrics.roi ]] }) }}",
+        "options": {}
+      },
+      "id": "log-roi",
+      "name": "Log ROI Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 500],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Hourly Metrics Update": {
+      "main": [
+        [
+          {
+            "node": "Calculate Metrics Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Metrics Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Check Alert Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Alert Thresholds": {
+      "main": [
+        [
+          {
+            "node": "Send Metrics Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Daily Growth Tasks": {
+      "main": [
+        [
+          {
+            "node": "Run Organic Growth Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Organic Growth Activities": {
+      "main": [
+        [
+          {
+            "node": "Mock Directory API Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Directory API Call": {
+      "main": [
+        [
+          {
+            "node": "Log Growth Activities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Growth Activities": {
+      "main": [
+        [
+          {
+            "node": "Calculate ROI Simulation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate ROI Simulation": {
+      "main": [
+        [
+          {
+            "node": "Log ROI Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "metrics"
+    },
+    {
+      "name": "growth"
+    },
+    {
+      "name": "roi"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "intelligent-automation-system"
+  }
+}

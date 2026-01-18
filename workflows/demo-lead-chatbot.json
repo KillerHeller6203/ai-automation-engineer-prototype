@@ -1,0 +1,328 @@
+{
+  "name": "Lead Qualification Chatbot - Demo",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "e7d8f9a0-1234-5678-abcd-000000000001",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "lead-chatbot-demo"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lead Qualification Scoring Engine\nconst userMessage = $input.first().json.chatInput || '';\nconst sessionId = $input.first().json.sessionId || 'session-' + Date.now();\n\n// Intent Detection Function\nfunction detectIntent(message) {\n  const lowerMsg = message.toLowerCase();\n  const result = { data: {}, score: 0 };\n  \n  // Budget detection\n  const budgetMatch = lowerMsg.match(/\\$?([\\d,]+)(?:k|\\s*thousand)?|budget[:\\s]+\\$?([\\d,]+)/i);\n  if (budgetMatch) {\n    let budget = parseInt((budgetMatch[1] || budgetMatch[2] || '0').replace(/,/g, ''));\n    if (lowerMsg.includes('k') || lowerMsg.includes('thousand')) budget *= 1000;\n    result.data.budget = budget;\n    if (budget >= 50000) result.score += 30;\n    else if (budget >= 10000) result.score += 20;\n    else result.score += 10;\n  }\n  \n  // Goal detection\n  const goals = ['lead gen', 'lead generation', 'sales', 'marketing', 'growth', 'automation', 'scale'];\n  for (const goal of goals) {\n    if (lowerMsg.includes(goal)) {\n      result.data.goal = goal;\n      result.score += 20;\n      break;\n    }\n  }\n  \n  // Timeline detection\n  const timeMatch = lowerMsg.match(/(\\d+)\\s*(day|week|month|year)/i);\n  if (timeMatch) {\n    result.data.timeline = `${timeMatch[1]} ${timeMatch[2]}(s)`;\n    if (timeMatch[2].toLowerCase() === 'week' || timeMatch[2].toLowerCase() === 'day') result.score += 20;\n    else result.score += 10;\n  }\n  \n  // Email detection\n  const emailMatch = lowerMsg.match(/[\\w.-]+@[\\w.-]+\\.[a-z]{2,}/i);\n  if (emailMatch) {\n    result.data.email = emailMatch[0];\n    result.score += 20;\n  }\n  \n  // Industry detection\n  const industries = ['tech', 'healthcare', 'finance', 'retail', 'saas', 'ecommerce'];\n  for (const ind of industries) {\n    if (lowerMsg.includes(ind)) {\n      result.data.industry = ind;\n      result.score += 10;\n      break;\n    }\n  }\n  \n  return result;\n}\n\n// Calculate score and temperature\nconst detection = detectIntent(userMessage);\nconst score = Math.min(detection.score, 100);\nlet temperature = 'cold';\nif (score >= 70) temperature = 'hot';\nelse if (score >= 50) temperature = 'warm';\n\n// Determine next question\nfunction getNextQuestion(data) {\n  if (!data.goal) return 'What is your primary business goal? (e.g., lead generation, sales growth, marketing automation)';\n  if (!data.budget) return 'What budget range are you considering for this initiative?';\n  if (!data.timeline) return 'What is your ideal timeline for implementation?';\n  if (!data.email) return 'Could you share your email so we can send you relevant resources?';\n  return null;\n}\n\nconst nextQuestion = getNextQuestion(detection.data);\nconst isQualified = score >= 50;\nconst isComplete = nextQuestion === null;\n\nreturn {\n  json: {\n    sessionId,\n    userMessage,\n    collectedData: detection.data,\n    qualificationScore: score,\n    leadTemperature: temperature,\n    isQualified,\n    isComplete,\n    nextQuestion,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "e7d8f9a0-1234-5678-abcd-000000000002",
+      "name": "Score & Qualify Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mock AI Response Generator (simulates OpenAI)\nconst input = $input.first().json;\nconst score = input.qualificationScore;\nconst temp = input.leadTemperature;\nconst nextQ = input.nextQuestion;\nconst data = input.collectedData;\n\n// Generate contextual response\nlet response = '';\n\nif (input.isComplete) {\n  response = `Thank you for sharing all that information! Based on what you've told me:\\n\\n`;\n  response += `- Goal: ${data.goal || 'Growth'}\\n`;\n  response += `- Budget: $${data.budget?.toLocaleString() || 'TBD'}\\n`;\n  response += `- Timeline: ${data.timeline || 'Flexible'}\\n\\n`;\n  response += `Your qualification score is ${score}/100 (${temp.toUpperCase()} lead).\\n\\n`;\n  response += `A specialist will reach out to you at ${data.email} within 24 hours to discuss next steps!`;\n} else if (score > 0) {\n  response = `Thanks for that information! I've noted:\\n`;\n  if (data.goal) response += `- Your goal: ${data.goal}\\n`;\n  if (data.budget) response += `- Your budget: $${data.budget.toLocaleString()}\\n`;\n  if (data.timeline) response += `- Your timeline: ${data.timeline}\\n`;\n  response += `\\nTo better assist you: ${nextQ}`;\n} else {\n  response = `Hello! I'm here to help you with your business growth needs.\\n\\n${nextQ}`;\n}\n\nreturn {\n  json: {\n    ...input,\n    aiResponse: response,\n    modelUsed: 'mock-gpt-4o-mini'\n  }\n};"
+      },
+      "id": "e7d8f9a0-1234-5678-abcd-000000000003",
+      "name": "Generate AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.isQualified }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "e7d8f9a0-1234-5678-abcd-000000000004",
+      "name": "Is Qualified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Mock-CRM",
+              "value": "HubSpot-Simulation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ action: 'CREATE_CONTACT', properties: { email: $json.collectedData.email || 'lead-' + Date.now() + '@demo.com', lead_score: $json.qualificationScore, lead_status: $json.leadTemperature.toUpperCase(), goal: $json.collectedData.goal || 'Not specified', budget: $json.collectedData.budget || 0, industry: $json.collectedData.industry || 'Not specified', source: 'chatbot', created_at: $json.timestamp } }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e7d8f9a0-1234-5678-abcd-000000000005",
+      "name": "Mock CRM - Create Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": ""
+          },
+          "conditions": [
+            {
+              "id": "condition-hot",
+              "leftValue": "={{ $json.leadTemperature }}",
+              "rightValue": "hot",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "e7d8f9a0-1234-5678-abcd-000000000006",
+      "name": "Is Hot Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1440, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Mock-Service",
+              "value": "Slack-Webhook-Simulation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: '#sales-alerts', username: 'Lead Bot', icon_emoji: ':fire:', blocks: [{ type: 'header', text: { type: 'plain_text', text: 'HOT LEAD ALERT', emoji: true } }, { type: 'section', fields: [{ type: 'mrkdwn', text: '*Score:* ' + $('Score & Qualify Lead').item.json.qualificationScore + '/100' }, { type: 'mrkdwn', text: '*Temperature:* ' + $('Score & Qualify Lead').item.json.leadTemperature.toUpperCase() }] }, { type: 'section', fields: [{ type: 'mrkdwn', text: '*Goal:* ' + ($('Score & Qualify Lead').item.json.collectedData.goal || 'N/A') }, { type: 'mrkdwn', text: '*Budget:* $' + ($('Score & Qualify Lead').item.json.collectedData.budget || 'N/A') }] }, { type: 'section', text: { type: 'mrkdwn', text: '*Email:* ' + ($('Score & Qualify Lead').item.json.collectedData.email || 'Not provided') } }, { type: 'context', elements: [{ type: 'mrkdwn', text: 'Submitted: ' + $('Score & Qualify Lead').item.json.timestamp }] }] }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e7d8f9a0-1234-5678-abcd-000000000007",
+      "name": "Mock Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Mock-Service",
+              "value": "Metrics-Logger"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sheet: 'LeadMetrics', row: { timestamp: $('Score & Qualify Lead').item.json.timestamp, session_id: $('Score & Qualify Lead').item.json.sessionId, score: $('Score & Qualify Lead').item.json.qualificationScore, temperature: $('Score & Qualify Lead').item.json.leadTemperature, qualified: $('Score & Qualify Lead').item.json.isQualified, goal: $('Score & Qualify Lead').item.json.collectedData.goal || '', budget: $('Score & Qualify Lead').item.json.collectedData.budget || '', email: $('Score & Qualify Lead').item.json.collectedData.email || '' } }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "e7d8f9a0-1234-5678-abcd-000000000008",
+      "name": "Log Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $('Generate AI Response').item.json.aiResponse }}",
+        "options": {}
+      },
+      "id": "e7d8f9a0-1234-5678-abcd-000000000009",
+      "name": "Respond to Chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1920, 300]
+    },
+    {
+      "parameters": {},
+      "id": "e7d8f9a0-1234-5678-abcd-000000000010",
+      "name": "Continue Flow",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1680, 300]
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Score & Qualify Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score & Qualify Lead": {
+      "main": [
+        [
+          {
+            "node": "Generate AI Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate AI Response": {
+      "main": [
+        [
+          {
+            "node": "Is Qualified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Qualified?": {
+      "main": [
+        [
+          {
+            "node": "Mock CRM - Create Contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock CRM - Create Contact": {
+      "main": [
+        [
+          {
+            "node": "Is Hot Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Hot Lead?": {
+      "main": [
+        [
+          {
+            "node": "Mock Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Continue Flow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Slack Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue Flow": {
+      "main": [
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "demo"
+    },
+    {
+      "name": "chatbot"
+    },
+    {
+      "name": "lead-qualification"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "demo-instance"
+  }
+}

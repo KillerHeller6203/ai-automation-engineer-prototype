@@ -1,0 +1,377 @@
+{
+  "name": "02 - AI Council Multi-Agent Decision System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-council",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "council-webhook",
+      "name": "AI Council Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ai-council-trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the query and context from webhook\nconst input = $input.first().json;\nconst query = input.body?.query || input.query || 'Analyze lead generation performance';\nconst context = input.body?.context || input.context || {};\nconst leadData = input.body?.leadData || input.leadData || null;\n\n// Prepare structured request for AI Council\nreturn {\n  json: {\n    requestId: 'council-' + Date.now(),\n    query,\n    context,\n    leadData,\n    timestamp: new Date().toISOString(),\n    councilMembers: ['researcher', 'strategist', 'optimizer'],\n    status: 'initiated'\n  }\n};"
+      },
+      "id": "prepare-council-request",
+      "name": "Prepare Council Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.8,
+          "maxTokens": 800
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are the RESEARCHER agent in an AI Council. Your role is to:\n1. Analyze the given query from a research perspective\n2. Identify relevant data points, trends, and market insights\n3. Provide evidence-based findings\n4. Suggest areas for deeper investigation\n\nBe thorough but concise. Focus on actionable research insights."
+            },
+            {
+              "role": "user",
+              "content": "Query: {{ $json.query }}\n\nContext: {{ JSON.stringify($json.context) }}\n\nLead Data (if any): {{ JSON.stringify($json.leadData) }}\n\nProvide your research analysis and findings."
+            }
+          ]
+        }
+      },
+      "id": "agent-researcher",
+      "name": "Agent 1: Researcher",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 100],
+      "credentials": {
+        "openAiApi": {
+          "id": "OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 800
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are the STRATEGIST agent in an AI Council. Your role is to:\n1. Analyze the given query from a strategic business perspective\n2. Identify opportunities, risks, and competitive advantages\n3. Recommend strategic approaches and prioritization\n4. Consider ROI and resource allocation\n\nThink like a business strategist. Focus on actionable strategic recommendations."
+            },
+            {
+              "role": "user",
+              "content": "Query: {{ $json.query }}\n\nContext: {{ JSON.stringify($json.context) }}\n\nLead Data (if any): {{ JSON.stringify($json.leadData) }}\n\nProvide your strategic analysis and recommendations."
+            }
+          ]
+        }
+      },
+      "id": "agent-strategist",
+      "name": "Agent 2: Strategist",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.6,
+          "maxTokens": 800
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are the OPTIMIZER agent in an AI Council. Your role is to:\n1. Analyze the given query from an optimization perspective\n2. Identify inefficiencies and bottlenecks\n3. Suggest specific process improvements and automations\n4. Propose metrics to track and KPIs to improve\n\nThink like a systems engineer. Focus on measurable optimization opportunities."
+            },
+            {
+              "role": "user",
+              "content": "Query: {{ $json.query }}\n\nContext: {{ JSON.stringify($json.context) }}\n\nLead Data (if any): {{ JSON.stringify($json.leadData) }}\n\nProvide your optimization analysis and recommendations."
+            }
+          ]
+        }
+      },
+      "id": "agent-optimizer",
+      "name": "Agent 3: Optimizer",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [680, 500],
+      "credentials": {
+        "openAiApi": {
+          "id": "OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-council-responses",
+      "name": "Merge Council Responses",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all council member responses\nconst items = $input.all();\n\nlet researcherResponse = '';\nlet strategistResponse = '';\nlet optimizerResponse = '';\n\n// Extract responses from merged items\nfor (const item of items) {\n  const content = item.json.message?.content || item.json.text || '';\n  const nodeName = item.json.nodeName || '';\n  \n  // Try to identify which agent this came from\n  if (content.toLowerCase().includes('research') || nodeName.includes('Researcher')) {\n    researcherResponse = content;\n  } else if (content.toLowerCase().includes('strateg') || nodeName.includes('Strategist')) {\n    strategistResponse = content;\n  } else if (content.toLowerCase().includes('optim') || nodeName.includes('Optimizer')) {\n    optimizerResponse = content;\n  } else {\n    // Assign to first empty slot\n    if (!researcherResponse) researcherResponse = content;\n    else if (!strategistResponse) strategistResponse = content;\n    else if (!optimizerResponse) optimizerResponse = content;\n  }\n}\n\n// Generate consensus summary\nconst consensusSummary = {\n  keyFindings: [],\n  recommendedActions: [],\n  priorityLevel: 'medium',\n  confidenceScore: 0.75\n};\n\n// Extract key points (simplified extraction)\nconst allText = researcherResponse + ' ' + strategistResponse + ' ' + optimizerResponse;\nif (allText.toLowerCase().includes('urgent') || allText.toLowerCase().includes('immediate')) {\n  consensusSummary.priorityLevel = 'high';\n  consensusSummary.confidenceScore = 0.85;\n}\n\nreturn {\n  json: {\n    requestId: $('Prepare Council Request').item.json.requestId,\n    query: $('Prepare Council Request').item.json.query,\n    councilResponses: {\n      researcher: researcherResponse || 'No research analysis available',\n      strategist: strategistResponse || 'No strategic analysis available',\n      optimizer: optimizerResponse || 'No optimization analysis available'\n    },\n    consensus: consensusSummary,\n    timestamp: new Date().toISOString(),\n    status: 'completed'\n  }\n};"
+      },
+      "id": "aggregate-council-decisions",
+      "name": "Aggregate Council Decisions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.5,
+          "maxTokens": 1000
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are the MODERATOR of an AI Council. Your role is to:\n1. Synthesize insights from multiple AI agents (Researcher, Strategist, Optimizer)\n2. Identify consensus and conflicts between recommendations\n3. Create a unified action plan with prioritized steps\n4. Assign confidence levels to final recommendations\n\nProvide a clear, actionable summary that combines all perspectives."
+            },
+            {
+              "role": "user",
+              "content": "Original Query: {{ $json.query }}\n\n=== RESEARCHER ANALYSIS ===\n{{ $json.councilResponses.researcher }}\n\n=== STRATEGIST ANALYSIS ===\n{{ $json.councilResponses.strategist }}\n\n=== OPTIMIZER ANALYSIS ===\n{{ $json.councilResponses.optimizer }}\n\nPlease synthesize these perspectives into a unified recommendation with:\n1. Key consensus points\n2. Any conflicting viewpoints and how to resolve them\n3. Prioritized action items (numbered list)\n4. Expected outcomes and metrics to track"
+            }
+          ]
+        }
+      },
+      "id": "council-moderator",
+      "name": "Council Moderator Synthesis",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.4,
+      "position": [1340, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final council output preparation\nconst aggregated = $('Aggregate Council Decisions').item.json;\nconst synthesis = $input.first().json;\n\nreturn {\n  json: {\n    requestId: aggregated.requestId,\n    originalQuery: aggregated.query,\n    councilDecision: {\n      synthesis: synthesis.message?.content || synthesis.text || 'Synthesis unavailable',\n      individualResponses: aggregated.councilResponses,\n      consensus: aggregated.consensus\n    },\n    metadata: {\n      processedAt: new Date().toISOString(),\n      agentsConsulted: ['researcher', 'strategist', 'optimizer', 'moderator'],\n      status: 'decision_ready'\n    },\n    actionRequired: aggregated.consensus.priorityLevel === 'high'\n  }\n};"
+      },
+      "id": "format-council-output",
+      "name": "Format Council Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-council-decision",
+      "name": "Return Council Decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/YOUR_SPREADSHEET_ID/values/CouncilDecisions!A:F:append",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "valueInputOption",
+              "value": "USER_ENTERED"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ values: [[ $json.metadata.processedAt, $json.requestId, $json.originalQuery, $json.councilDecision.consensus.priorityLevel, $json.councilDecision.consensus.confidenceScore, $json.actionRequired ? 'YES' : 'NO' ]] }) }}",
+        "options": {}
+      },
+      "id": "log-council-decision",
+      "name": "Log Council Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 500],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_CREDENTIAL_ID",
+          "name": "Google Sheets API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "AI Council Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Council Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Council Request": {
+      "main": [
+        [
+          {
+            "node": "Agent 1: Researcher",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Agent 2: Strategist",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Agent 3: Optimizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 1: Researcher": {
+      "main": [
+        [
+          {
+            "node": "Merge Council Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent 2: Strategist": {
+      "main": [
+        [
+          {
+            "node": "Merge Council Responses",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Agent 3: Optimizer": {
+      "main": [
+        [
+          {
+            "node": "Merge Council Responses",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Council Responses": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Council Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Council Decisions": {
+      "main": [
+        [
+          {
+            "node": "Council Moderator Synthesis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Council Moderator Synthesis": {
+      "main": [
+        [
+          {
+            "node": "Format Council Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Council Output": {
+      "main": [
+        [
+          {
+            "node": "Return Council Decision",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Council Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "ai-council"
+    },
+    {
+      "name": "multi-agent"
+    },
+    {
+      "name": "decision-making"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "intelligent-automation-system"
+  }
+}
