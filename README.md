@@ -7,6 +7,14 @@ It simulates a scalable, industry-agnostic workflow that handles **user engageme
 The project is designed to demonstrate **system thinking**, **workflow automation expertise**, and **AI-driven adaptability** under free-tier constraints, aligning directly with the **AI Automation Engineer** role requirements.
 
 ---
+## Workflow Architecture
+
+This diagram shows the complete automation flow including lead intake,
+AI-based qualification, decision routing, and response generation.
+
+![n8n Workflow Architecture](docs/n8n_workflow_img.jpeg)
+
+---
 
 ## Objectives (Task Alignment)
 This prototype was built to satisfy the pre-hiring task objectives:
