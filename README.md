@@ -13,7 +13,7 @@ The project is designed to demonstrate **system thinking**, **workflow automatio
 This diagram shows the complete automation flow including lead intake,
 AI-based qualification, decision routing, and response generation.
 
-![n8n Workflow Architecture]([docs/n8n_workflow_img.jpeg](https://drive.google.com/file/d/1d9jLANtUbCgd7I949cT4OLSLBXlDLmlF/view?usp=sharing))
+![n8n Workflow Architecture](docs/n8n_workflow_img.jpeg)
 
 ---
 
@@ -25,7 +25,7 @@ This short demo shows the automation running end-to-end:
 - AI response generation
 - Final output
 
-▶️ [Click to watch the workflow demo](docs/n8n_workflow_vid.mp4)
+[Click to watch the workflow demo]([docs/n8n_workflow_vid.mp4](https://drive.google.com/file/d/1d9jLANtUbCgd7I949cT4OLSLBXlDLmlF/view?usp=sharing))
 
 ---
 
