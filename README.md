@@ -25,7 +25,8 @@ This short demo shows the automation running end-to-end:
 - AI response generation
 - Final output
 
-[Click to watch the workflow demo]([docs/n8n_workflow_vid.mp4](https://drive.google.com/file/d/1d9jLANtUbCgd7I949cT4OLSLBXlDLmlF/view?usp=sharing))
+[Click to watch the workflow demo]
+https://drive.google.com/file/d/1d9jLANtUbCgd7I949cT4OLSLBXlDLmlF/view?usp=sharing
 
 ---
 
